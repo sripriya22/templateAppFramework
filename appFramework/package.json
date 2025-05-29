@@ -35,10 +35,10 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/data-model-framework/tree/main/appFramework"
+    "url": "https://github.com/sripriya22/templateAppFramework/tree/main/appFramework"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/data-model-framework/issues"
+    "url": "https://github.com/sripriya22/templateAppFramework/issues"
   },
   "publishConfig": {
     "access": "public"
