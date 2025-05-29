@@ -1,0 +1,31 @@
+{
+  "version": "1.0",
+  "lastUpdated": "2025-05-25T03:00:00.000Z",
+  "models": [
+    {
+      "id": "model1",
+      "name": "Sample Model",
+      "description": "A sample data model for testing",
+      "properties": {
+        "stringProp": "Hello, World!",
+        "numberProp": 42,
+        "booleanProp": true,
+        "arrayProp": [1, 2, 3, 4, 5],
+        "objectProp": {
+          "nested": true,
+          "value": "Nested value"
+        }
+      },
+      "metadata": {
+        "createdAt": "2025-05-25T00:00:00.000Z",
+        "modifiedAt": "2025-05-25T03:00:00.000Z"
+      }
+    }
+  ],
+  "status": "active",
+  "settings": {
+    "autoSave": true,
+    "notifications": true,
+    "theme": "light"
+  }
+}

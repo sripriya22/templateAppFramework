@@ -1,0 +1,15 @@
+{
+  "name": "app-framework-app",
+  "version": "0.1.0",
+  "description": "Application created with App Framework",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "echo 'Run from the root directory with: node server.js'"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.24.0",
+    "@babel/traverse": "^7.24.0",
+    "@babel/types": "^7.24.0"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "ClassName": "User",
+  "Extends": "BaseModel",
+  "Description": "Represents a system user",
+  "Properties": {
+    "username": {
+      "Type": "string",
+      "IsPrimitive": true,
+      "IsArray": false,
+      "DefaultValue": "",
+      "Description": "User's login name"
+    },
+    "email": {
+      "Type": "string",
+      "IsPrimitive": true,
+      "IsArray": false,
+      "DefaultValue": "",
+      "Description": "User's email address"
+    },
+    "isActive": {
+      "Type": "boolean",
+      "IsPrimitive": true,
+      "IsArray": false,
+      "DefaultValue": true,
+      "Description": "Whether the user account is active"
+    },
+    "roles": {
+      "Type": "string",
+      "IsPrimitive": true,
+      "IsArray": true,
+      "DefaultValue": ["user"],
+      "Description": "User roles"
+    }
+  }
+}

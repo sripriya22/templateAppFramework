@@ -1,0 +1,162 @@
+/* TreeTable Widget Styles */
+
+.tree-table {
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    font-family: var(--font-family, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    color: var(--text-color, #333);
+}
+
+.tree-table-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-family, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif);
+    font-size: 13px;
+    box-shadow: var(--shadow-light, 0 1px 3px rgba(0, 0, 0, 0.05));
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.tree-table-table thead th {
+    position: sticky;
+    top: 0;
+    background-color: var(--panel-header-background, #f5f7fa);
+    padding: 10px 14px;
+    font-weight: 500;
+    color: var(--text-color, #333);
+    border-bottom: 1px solid var(--border-color, #e1e5eb);
+    text-align: left;
+    font-size: 14px;
+    z-index: 1;
+}
+
+.tree-table-row {
+    border-bottom: 1px solid var(--border-color, #e1e5eb);
+    transition: all 0.2s;
+}
+
+.tree-table-table tbody tr:hover {
+    background-color: var(--hover-color, #f0f2f5);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-light);
+}
+
+.tree-table-table td {
+    padding: 8px 12px;
+    vertical-align: top;
+    border-right: 1px solid var(--border-color, #e1e5eb);
+}
+
+.tree-table-table td:last-child {
+    border-right: none;
+}
+
+.toggle-cell {
+    width: 24px;
+    cursor: pointer;
+    text-align: center;
+}
+
+.toggle-icon {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    color: var(--text-light-color, #666);
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+}
+
+.toggle-icon:hover {
+    color: var(--primary-color, #3498db);
+    background-color: rgba(52, 152, 219, 0.1);
+}
+
+.name-cell {
+    min-width: 200px;
+    max-width: 300px;
+}
+
+.type-cell {
+    width: 80px;
+    color: #666;
+}
+
+.value-cell {
+    min-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+    display: table-cell; /* Ensure cell is displayed */
+}
+
+.tree-indent {
+    display: inline-block;
+}
+
+.empty-message {
+    color: #999;
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
+/* Inspector toolbar */
+.inspector-toolbar {
+    padding: 8px 12px;
+    background-color: var(--background-color, #f7f9fc);
+    border-bottom: 1px solid var(--border-color, #e1e5eb);
+    display: flex;
+    gap: 8px;
+    box-shadow: var(--shadow-light, 0 1px 3px rgba(0, 0, 0, 0.05));
+}
+
+.inspector-button {
+    padding: 8px 14px;
+    font-size: 12px;
+    background-color: var(--panel-background, white);
+    border: 1px solid var(--border-color, #e1e5eb);
+    border-radius: var(--border-radius, 6px);
+    cursor: pointer;
+    color: var(--text-color, #333);
+    transition: all 0.2s;
+    box-shadow: var(--shadow-light, 0 1px 3px rgba(0, 0, 0, 0.05));
+}
+
+.inspector-button:hover {
+    background-color: var(--background-color, #f7f9fc);
+    border-color: var(--primary-color, #3498db);
+    color: var(--primary-color, #3498db);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-medium, 0 4px 10px rgba(0, 0, 0, 0.08));
+}
+
+.inspector-header {
+    padding: 14px 18px;
+    font-weight: 600;
+    background-color: var(--background-color, #f7f9fc);
+    border-bottom: 1px solid var(--border-color, #e1e5eb);
+    color: var(--text-color, #333);
+    font-size: 16px;
+    box-shadow: var(--shadow-light, 0 1px 3px rgba(0, 0, 0, 0.05));
+}
+
+/* Type-specific colors */
+.type-string { color: #e74c3c; font-weight: 500; }
+.type-number { color: #9b59b6; font-weight: 500; }
+.type-boolean { color: #3498db; font-weight: 500; }
+.type-null, .type-undefined { color: #7f8c8d; font-style: italic; }
+.type-object { color: #e67e22; font-weight: 500; }
+.type-array { color: #1abc9c; font-weight: 500; }
+
+/* Tree container */
+.tree-container {
+    height: calc(100% - 70px); /* Subtract header and toolbar height */
+    overflow: auto;
+    overflow-x: auto;
+    width: 100%;
+}

@@ -1,0 +1,65 @@
+{
+  "name": "Test Model",
+  "version": "1.0.0",
+  "description": "Test model for standalone view",
+  "settings": {
+    "autoSave": true,
+    "theme": "light",
+    "notifications": {
+      "enabled": true,
+      "sound": true,
+      "frequency": "immediate"
+    }
+  },
+  "parameters": [
+    {
+      "id": "param1",
+      "name": "Parameter 1",
+      "value": 42,
+      "unit": "mg",
+      "min": 0,
+      "max": 100
+    },
+    {
+      "id": "param2",
+      "name": "Parameter 2",
+      "value": 3.14,
+      "unit": "ml",
+      "min": 0,
+      "max": 10
+    }
+  ],
+  "samples": [
+    {
+      "id": "sample1",
+      "name": "Sample 1",
+      "type": "control",
+      "concentration": 1.0,
+      "replicates": 3
+    },
+    {
+      "id": "sample2",
+      "name": "Sample 2",
+      "type": "test",
+      "concentration": 2.5,
+      "replicates": 2
+    }
+  ],
+  "analysis": {
+    "method": "standard",
+    "normalization": {
+      "enabled": true,
+      "method": "zscore"
+    },
+    "thresholds": {
+      "pvalue": 0.05,
+      "fdr": 0.1
+    }
+  },
+  "metadata": {
+    "created": "2025-05-27T10:00:00Z",
+    "modified": "2025-05-27T14:30:00Z",
+    "author": "Test User",
+    "tags": ["test", "development", "prototype"]
+  }
+}

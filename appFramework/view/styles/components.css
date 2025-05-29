@@ -1,0 +1,382 @@
+/* Toolstrip styles */
+.toolstrip {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    gap: 8px;
+    background-color: var(--panel-background);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow-light);
+}
+
+.toolstrip-button {
+    padding: 8px 14px;
+    border: 1px solid var(--border-color);
+    background-color: var(--panel-background);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+    color: var(--text-color);
+    font-weight: 500;
+    box-shadow: var(--shadow-light);
+}
+
+.toolstrip-button:hover {
+    background-color: var(--background-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-medium);
+}
+
+.toolstrip-button:active {
+    background-color: var(--primary-color);
+    color: white;
+    border-color: var(--primary-color);
+}
+
+.toolstrip-button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Model Panel styles */
+.model-panel {
+    height: 100%;
+    overflow: auto;
+    padding: 16px;
+    background-color: var(--panel-background);
+}
+
+.model-form {
+    max-width: 800px;
+    margin: 0 auto;
+    font-family: var(--font-family);
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: var(--text-color);
+    font-size: 14px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group input[type="date"],
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: var(--panel-background);
+    color: var(--text-color);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-shadow: var(--shadow-light);
+    font-family: var(--font-family);
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="number"]:focus,
+.form-group input[type="date"]:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.form-group input[type="text"]:read-only,
+.form-group input[type="number"]:read-only,
+.form-group input[type="date"]:read-only,
+.form-group textarea:read-only {
+    background-color: var(--background-color);
+    cursor: not-allowed;
+    border-color: var(--border-color);
+    color: var(--text-muted-color);
+    box-shadow: none;
+}
+
+/* Array tables */
+.array-table-container {
+    max-height: 300px;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
+.array-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    font-family: var(--font-family);
+}
+
+.array-table th,
+.array-table td {
+    border: 1px solid var(--border-color);
+    padding: 10px 14px;
+    text-align: left;
+}
+
+.array-table th {
+    background-color: var(--background-color);
+    font-weight: 600;
+    color: var(--text-color);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.array-table tr:nth-child(even) {
+    background-color: rgba(247, 249, 252, 0.5);
+}
+
+.array-table tr:hover {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+/* Form object styles */
+.form-object {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 10px 15px;
+    margin: 10px 0;
+}
+
+.form-object legend {
+    padding: 0 5px;
+    font-weight: 600;
+    color: #444;
+}
+
+/* Empty array message */
+.empty-array {
+    color: #777;
+    font-style: italic;
+    padding: 10px;
+    text-align: center;
+}
+
+/* Model Inspector (Tree View) styles */
+.model-inspector {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0;
+    background-color: var(--panel-background);
+    border-radius: 4px;
+}
+
+.tree-view {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.tree-item {
+    margin: 2px 0;
+}
+
+.tree-item-header {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 2px 0;
+    user-select: none;
+}
+
+.tree-item-header:hover {
+    background-color: #f5f5f5;
+}
+
+.tree-toggle {
+    display: inline-block;
+    width: 16px;
+    text-align: center;
+    margin-right: 4px;
+    color: #666;
+}
+
+.tree-name {
+    font-weight: 600;
+    margin-right: 5px;
+}
+
+.tree-type {
+    font-size: 11px;
+    color: #888;
+    margin-left: 5px;
+    font-style: italic;
+}
+
+.tree-content {
+    margin-left: 20px;
+    border-left: 1px dashed #ddd;
+    padding-left: 12px;
+}
+
+.tree-value {
+    color: #2c3e50;
+    margin-left: 5px;
+}
+
+/* Type-specific colors */
+.type-string { color: #e74c3c; }
+.type-number { color: #9b59b6; }
+.type-boolean { color: #3498db; }
+.type-null, .type-undefined { color: #7f8c8d; }
+.type-object { color: #e67e22; }
+.type-array { color: #1abc9c; }
+
+/* JSON Viewer styles */
+.json-viewer {
+    height: 100%;
+    overflow: auto;
+    padding: 10px;
+    background-color: #f8f8f8;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.json-content {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+/* JSON syntax highlighting */
+.json-key { color: #9b59b6; }
+.json-string { color: #e74c3c; }
+.json-number { color: #2ecc71; }
+.json-boolean { color: #3498db; }
+.json-null { color: #7f8c8d; }
+
+/* Log Console styles */
+.log-console {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background-color: var(--panel-background);
+    color: var(--text-color);
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: var(--shadow-light);
+    overflow-y: auto;
+}
+
+.panel-header {
+    padding: 14px 18px;
+    font-weight: 600;
+    background-color: var(--background-color);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-color);
+    font-size: 16px;
+    box-shadow: var(--shadow-light);
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 18px;
+    background-color: var(--background-color);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: var(--shadow-light);
+}
+
+.log-header h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.log-clear-button {
+    background-color: var(--panel-background);
+    border: 1px solid var(--border-color);
+    color: var(--text-color);
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-light);
+}
+
+.log-clear-button:hover {
+    background-color: var(--background-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.log-content {
+    flex: 1;
+    overflow: auto;
+    padding: 8px;
+    background-color: var(--panel-background);
+}
+
+.log-entry {
+    padding: 6px 8px;
+    margin: 2px 0;
+    border-left: 3px solid transparent;
+    word-break: break-all;
+    border-radius: 0 4px 4px 0;
+    transition: background-color 0.2s;
+}
+
+.log-entry:hover {
+    background-color: rgba(52, 152, 219, 0.05);
+}
+
+.log-time {
+    color: var(--text-muted-color);
+    margin-right: 6px;
+    font-size: 11px;
+}
+
+.log-level {
+    font-weight: 600;
+    margin-right: 6px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.log-info .log-level {
+    color: white;
+    background-color: var(--primary-color);
+}
+
+.log-warn .log-level {
+    color: white;
+    background-color: #f39c12;
+}
+
+.log-error .log-level {
+    color: white;
+    background-color: #e74c3c;
+}
+
+.log-debug .log-level {
+    color: white;
+    background-color: var(--secondary-color);
+}
+
+.log-message {
+    color: var(--text-color);
+    font-family: var(--font-family);
+}

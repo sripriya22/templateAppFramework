@@ -1,0 +1,49 @@
+{
+  "name": "@data-model-framework/core",
+  "version": "0.1.0",
+  "description": "Core framework for managing data models with type checking and validation",
+  "main": "dist/index.js",
+  "module": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ../../jest.config.js",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --config ../../jest.config.js",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config ../../jest.config.js",
+    "clean": "rimraf dist",
+    "build": "npm run clean && babel src --out-dir dist --extensions '.js' --source-maps",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "whatwg-fetch": "^3.6.20"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.27.0",
+    "rimraf": "^5.0.5"
+  },
+  "keywords": [
+    "data-model",
+    "framework",
+    "validation",
+    "types",
+    "models"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/data-model-framework/tree/main/appFramework"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/data-model-framework/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

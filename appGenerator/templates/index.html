@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>Application</title>
+    <link rel="stylesheet" href="../appFramework/view/styles/layout.css">
+    <link rel="stylesheet" href="../appFramework/view/styles/components.css">
+    <link rel="stylesheet" href="../appFramework/view/styles/treetable.css">
+    <link rel="stylesheet" href="../appFramework/view/styles/scrollbars.css">
+</head>
+<body>
+    <div id="app"></div>
+    <script type="module" src="./App.js"></script>
+    <script>
+        // Function called by MATLAB to provide the HTML component
+        function setup(htmlComponent) {
+            if (window.app) {
+                window.app.setHTMLComponent(htmlComponent);
+            } else {
+                console.error('App instance not available when setting HTML component');
+            }
+        }
+    </script>
+</body>
+</html>

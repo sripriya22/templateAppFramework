@@ -1,0 +1,20 @@
+{
+  "ClassName": "BaseModel",
+  "Description": "Base class for all models",
+  "Properties": {
+    "id": {
+      "Type": "string",
+      "IsPrimitive": true,
+      "IsArray": false,
+      "DefaultValue": "",
+      "Description": "Unique identifier"
+    },
+    "createdAt": {
+      "Type": "string",
+      "IsPrimitive": true,
+      "IsArray": false,
+      "DefaultValue": "",
+      "Description": "Creation timestamp"
+    }
+  }
+}

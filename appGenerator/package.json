@@ -1,0 +1,57 @@
+{
+  "name": "@data-model-framework/generator",
+  "version": "0.1.0",
+  "description": "CLI tool for generating data model applications",
+  "main": "dist/index.js",
+  "bin": {
+    "dmf-generate": "./bin/generate.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ../../jest.config.js",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --config ../../jest.config.js",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config ../../jest.config.js",
+    "clean": "rimraf dist",
+    "build": "npm run clean && babel src --out-dir dist --extensions '.js' --source-maps",
+    "prepublishOnly": "npm run build",
+    "prepublish": "npm run build"
+  },
+  "dependencies": {
+    "@data-model-framework/core": "^0.1.0",
+    "chalk": "^4.1.2",
+    "commander": "^11.0.0",
+    "fs-extra": "^11.1.1",
+    "inquirer": "^9.2.12",
+    "ora": "^5.4.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.27.0",
+    "rimraf": "^5.0.5"
+  },
+  "keywords": [
+    "cli",
+    "generator",
+    "scaffolding",
+    "data-model",
+    "framework"
+  ],
+  "author": "Your Name <your.email@example.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/data-model-framework/tree/main/appGenerator"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/data-model-framework/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

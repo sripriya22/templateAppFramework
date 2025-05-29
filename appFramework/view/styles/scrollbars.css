@@ -1,0 +1,55 @@
+/* Mac-style subtle scrollbars */
+
+/* For Webkit browsers (Chrome, Safari) */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* For Firefox */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+/* Hide scrollbars when not in use but keep functionality */
+*:not(:hover)::-webkit-scrollbar-thumb {
+    opacity: 0;
+    background-color: transparent;
+}
+
+*:hover::-webkit-scrollbar-thumb {
+    opacity: 1;
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+/* Apply auto-hide to specific containers */
+.tree-container, .array-table-container, .model-panel, .model-inspector, .log-content {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+}
+
+.tree-container:hover, .array-table-container:hover, .model-panel:hover, .model-inspector:hover, .log-content:hover {
+    scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
