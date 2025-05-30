@@ -7,15 +7,19 @@ This is a template application created with the Template App Framework, designed
 Copy and paste the following prompt into Cascade, then follow the interactive steps:
 
 ```
-I need to create a new application using the Template App Framework. Please help me complete the setup by following the steps in this README exactly as written. Do not change any existing code in the project folder or create any new files apart from those created explicitly through these instructions. If a command fails, report back but do not try to find a workaround without explicitly checking in. Here are the variables you'll need:
+I need to create a new application using the Template App Framework. Please help me complete the setup by following the steps in templateAppFramework/appGenerator/templates/README.md exactly as written. Do not change any existing code in the project folder or create any new files apart from those created explicitly through these instructions. If a command fails, report back but do not try to find a workaround without explicitly checking in. Here are the variables you'll need:
 
-PROJECT_ROOT_FOLDER="templateAppFramework"    # The root folder of the project;
-                                                must contain the `appFramework` "library" folder
-APP_FOLDER_NAME="myApp"                       # The name for your application folder
-                                                (will be created in the `apps/` directory)
-ROOT_CLASS_NAME="RootModel"                   # The name for your root model class
-APP_TITLE="My Application"                    # The display name of your application
-EXAMPLE_OBJECT_PATH="resources/example.json"  # Path to your example object file
+PROJECT_ROOT_FOLDER="templateAppFramework"     # The root folder of the project;
+                                                 must contain the `appFramework`
+                                                 "library" folder & `appGenerator`
+                                                 tools folder
+APP_FOLDER_NAME="myApp"                        # The name for your application
+                                                 folder (will be created in the
+                                                 `apps/` directory)
+ROOT_CLASS_NAME="RootModel"                    # The name for your root model class
+APP_TITLE="My Application"                     # The display name of your
+                                                application
+EXAMPLE_OBJECT_PATH="/resources/testData.json" # Path to your example object file
 
 Please proceed with the setup steps in the README. If you encounter any issues, please stop and ask for clarification before proceeding.
 ```
@@ -30,7 +34,7 @@ From the project root directory, `$PROJECT_ROOT_FOLDER`, run:
 node appGenerator/utils/create-app.js $APP_NAME $EXAMPLE_OBJECT_PATH
 ```
 
-Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_NAME` directory.
+Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_FOLDER_NAME` directory.
 
 ### Step 2: Create Data Model Definitions
 Use the following prompt to interactively create the data-model JSONs:
@@ -90,31 +94,55 @@ getAppTitle() {
 ```
 
 ### Step 5: Run the Application
-Start live-server from the `$PROJECT_ROOT_FOLDER` directory and open your application:
+Start live-server from the `$PROJECT_ROOT_FOLDER` directory to open your application in a browser to work with it disconnected to the server (MATLAB).
 
 ```bash
 live-server
 ```
 
-The command will return a server address. Navigate to: `$APP_FOLDER_NAME/index.html` from the server address.
+The command will return a server address. Navigate to: `apps/$APP_FOLDER_NAME/index.html` from the server address.
 
 ## Project Structure
 Now you are ready to start customizing your application. Here is the project structure:
 ```
 .
-├── data-model/      # JSON model definitions (used to drive model verification and view settings)
-├── model/           # Generated model classes & optional custom model classes that extend from appFramework
-├── resources/       # Example data files
-├── view/            # Optional custom view files that extend from appFramework
-├── index.html       # Main HTML file including a `setup()` function in `index.html` to handle MATLAB integration
-└── App.js           # Main application class that extends from appFramework/controller/AbstractApp.js
+templateAppFramework/
+|
+├── appFramework/          # Core framework code (library)
+│   ├── controller/        # Base controller classes
+│   ├── model/             # Base model classes and utilities
+│   ├── view/              # Base view components and utilities
+│
+├── appGenerator/          # Tools for creating template apps using the appFramework
+│   ├── templates/         # Template files for new apps
+│   └── utils/             # Generator utilities
+│
+|   Not tracked in git repo, but could be tracked with their own repos:
+|
+├── apps/                  # Directory for all applications generated using the appGenerator
+│   └── myApp/             # Example application (your app folder)
+│       ├── data-model/    # JSON model definitions (used to drive model verification and view settings)
+│       ├── model/         # Generated model classes & optional custom model classes
+│       ├── view/          # Optional custom view files that extend from appFramework
+│       ├── resources/     # Example data files
+│       ├── index.html     # Main HTML file
+│       └── App.js         # Main application class (extends appFramework/controller/AbstractApp.js)
+│
+└── resources/             # Example object JSON data files
+
+Key Points:
+- The `appFramework` directory contains the core, reusable framework code
+- Each app in the `apps` directory is self-contained but can extend framework components
+- The `appGenerator` helps create new applications with the correct structure
+- Shared resources can be placed in the root `resources` directory
 ```
 
 ## Development Guidelines
 
 - Uses vanilla JavaScript with ES modules
-- No build step required
-- Designed to work with MATLAB's HTML component (uihtml)
+- No build step required at present; both the appFramework and app must be in the server root folder hierarchy
+- Apps are added to an apps folder that is not tracked in git as part of the templateAppFramework repo but could be tracked as a separate repo
+- Designed to work with MATLAB's HTML component (uihtml) or in a standalone environment for testing
 
 ## License
 
