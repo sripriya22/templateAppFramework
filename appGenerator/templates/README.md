@@ -65,7 +65,7 @@ Given the app root directory `$APP_FOLDER_NAME`, create data model definitions i
 }
 ```
 
-The SuperClass should always be `AbstractModelObject` unless it should extend a class that has been newly created in `$APP_FOLDER_NAME/model` folder during this step. Do not use any other SuperClass that does not have a *.js definition in either `$APP_FOLDER_NAME/model` or `$PROJECT_ROOT_FOLDER/appFramework/model` folders. Before creating the JSONs, confirm the proposed class hierarchy. You can then tweak it before finalizing the JSON files.
+The SuperClass should always be `AbstractModelObject` unless it should extend a class that has been newly created in `$APP_FOLDER_NAME/model` folder during this step. Do not use any other SuperClass that does not have a *.js definition in either `$APP_FOLDER_NAME/model` or `$PROJECT_ROOT_FOLDER/appFramework/model` folders. Ensure the case of the property names matches the JSON file. Before creating the JSONs, confirm the proposed class hierarchy. You can then tweak it before finalizing the JSON files.
 
 ### Step 3: Generate JavaScript Classes
 From the project root directory, `$PROJECT_ROOT_FOLDER`, generate the JavaScript class definitions:
