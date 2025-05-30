@@ -19,7 +19,7 @@ APP_FOLDER_NAME="myApp"                        # The name for your application
 ROOT_CLASS_NAME="RootModel"                    # The name for your root model class
 APP_TITLE="My Application"                     # The display name of your
                                                 application
-EXAMPLE_OBJECT_PATH="/resources/testData.json" # Path to your example object file
+EXAMPLE_OBJECT_PATH="resources/testData.json" # Path to your example object file
 
 Please proceed with the setup steps in the README. If you encounter any issues, please stop and ask for clarification before proceeding.
 ```
@@ -44,7 +44,7 @@ Given the app root directory `$APP_FOLDER_NAME`, create data model definitions i
 ```json
 {
     "ClassName": "ClassName",
-    "SuperClass": "ParentClassName",
+    "SuperClass": "AbstractModelObject",
     "Description": "Description of the class",
     "Properties": {
         "PropertyName": {
@@ -65,7 +65,7 @@ Given the app root directory `$APP_FOLDER_NAME`, create data model definitions i
 }
 ```
 
-Before creating the JSONs, confirm the proposed class hierarchy. You can then tweak it before finalizing the JSON files.
+The SuperClass should always be `AbstractModelObject` unless it should extend a class that has been newly created in `$APP_FOLDER_NAME/model` folder during this step. Do not use any other SuperClass that does not have a *.js definition in either `$APP_FOLDER_NAME/model` or `$PROJECT_ROOT_FOLDER/appFramework/model` folders. Before creating the JSONs, confirm the proposed class hierarchy. You can then tweak it before finalizing the JSON files.
 
 ### Step 3: Generate JavaScript Classes
 From the project root directory, `$PROJECT_ROOT_FOLDER`, generate the JavaScript class definitions:
