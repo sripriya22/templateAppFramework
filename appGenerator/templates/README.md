@@ -39,7 +39,7 @@ Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_FOLDER_N
 ### Step 2: Create Data Model Definitions
 Use the following prompt to interactively create the data-model JSONs:
 
-Given the app root directory `$APP_FOLDER_NAME`, create data model definitions in `$APP_FOLDER_NAME/data-model` based on the sample object in the `$APP_FOLDER_NAME/resources` folder. The root class should be named `$ROOT_CLASS_NAME`. Use a JSON language-agnostic format with the following structure:
+Given the app root directory `$APP_FOLDER_NAME`, create data model definitions in `$APP_FOLDER_NAME/data-model` based on the sample object in the `$APP_FOLDER_NAME/resources` folder. Every object within the hierarchy of the sample object should map to a JSON class definition. If there are objects that have the same properties, they should map to the same class definition. The root class should be named `$ROOT_CLASS_NAME`. Use a JSON language-agnostic format with the following structure:
 
 ```json
 {
