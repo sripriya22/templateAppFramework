@@ -39,7 +39,7 @@ Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_FOLDER_N
 ### Step 2: Create Data Model Definitions
 Use the following prompt to interactively create the data-model JSONs:
 
-Given the app root directory `$APP_FOLDER_NAME`, create data model definitions in `$APP_FOLDER_NAME/data-model` based on the sample object in the `$APP_FOLDER_NAME/resources` folder. Every object within the hierarchy of the sample object should map to a JSON class definition. If there are objects that have the same properties, they should map to the same class definition. The root class should be named `$ROOT_CLASS_NAME`. Use a JSON language-agnostic format with the following structure:
+Given the app root directory `$APP_FOLDER_NAME`, create data model definitions in `$APP_FOLDER_NAME/data-model` based on the sample object in the `$APP_FOLDER_NAME/resources` folder. The root class should be named `$ROOT_CLASS_NAME`. Use a JSON language-agnostic format with the following structure:
 
 ```json
 {
@@ -77,7 +77,7 @@ node appGenerator/utils/generate-classes.js $APP_FOLDER_NAME
 This will process the model definitions in `$APP_FOLDER_NAME/data-model` and generate the corresponding JavaScript classes in `$APP_FOLDER_NAME/model`.
 
 ### Step 4: Update App Configuration
-Update `$PROJECT_ROOT_FOLDER/$APP_FOLDER_NAME/App.js` to implement these required methods:
+Update `$PROJECT_ROOT_FOLDER/$APP_FOLDER_NAME/App.js` to implement these required methods. The method stubs are already provided in the template; just fill in the values for the root class name, root folder path, and app title. Do not make any other modifications to App.js.
 
 ```javascript
 getRootClassName() {
