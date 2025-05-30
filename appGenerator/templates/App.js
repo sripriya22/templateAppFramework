@@ -6,9 +6,9 @@
  * Customize the createModel and createView methods to use your custom classes.
  */
 
-// Import from the appFramework package using absolute paths
-import AbstractApp from '/appFramework/controller/AbstractApp.js';
-import BasicView from '/appFramework/view/BasicView.js';
+// Import from the appFramework package using relative paths
+import AbstractApp from '../../../appFramework/controller/AbstractApp.js';
+import BasicView from '../../../appFramework/view/BasicView.js';
 
 export class App extends AbstractApp {
   /**

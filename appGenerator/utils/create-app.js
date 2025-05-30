@@ -14,7 +14,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Path to the templates directory
 const TEMPLATES_DIR = join(__dirname, '../templates');
-const APP_FRAMEWORK_PATH = join(dirname(dirname(__dirname)), 'appFramework'); // Points to appFramework directory
+const ROOT_PATH = dirname(dirname(__dirname));
+const APPS_DIR = join(ROOT_PATH, 'apps');
 
 // List of files to copy from templates
 const FILES_TO_COPY = [
@@ -75,26 +76,31 @@ async function createApp(targetPath, dataFile) {
     
     // Function to copy a file with directory creation
     async function copyWithDirs(source, dest) {
-      // Create destination directory if it doesn't exist
-      const destDir = dirname(dest);
-      if (!existsSync(destDir)) {
-        await mkdir(destDir, { recursive: true });
+      try {
+        // Create destination directory if it doesn't exist
+        const destDir = dirname(dest);
+        if (!existsSync(destDir)) {
+          await mkdir(destDir, { recursive: true });
+        }
+        
+        // Read and write the file
+        let content = await readFile(source, 'utf8');
+        
+        // Update paths in the files if needed
+        if (source.endsWith('.js') || source.endsWith('.html')) {
+          // Update import paths to use relative paths from the new app location
+          content = content.replace(
+            /from '(\/|\.\.\/)*appFramework\//g,
+            "from '../../../appFramework/"
+          );
+        }
+        
+        await writeFile(dest, content, 'utf8');
+        console.log(`  - Created ${basename(dest)}`);
+      } catch (error) {
+        console.error(`Error copying ${source} to ${dest}:`, error.message);
+        throw error;
       }
-      
-      // Read and write the file
-      let content = await readFile(source, 'utf8');
-      
-      // Update paths in the files if needed
-      if (source.endsWith('.js') || source.endsWith('.html')) {
-        // Update import paths to use relative paths from the new app location
-        content = content.replace(
-          /from '(\.\.\/)*appFramework\//g,
-          `from '${APP_FRAMEWORK_PATH}/`
-        );
-      }
-      
-      await writeFile(dest, content, 'utf8');
-      return dest;
     }
     
     // Copy main files
@@ -111,7 +117,6 @@ async function createApp(targetPath, dataFile) {
         }
       } else {
         await copyWithDirs(source, dest);
-        console.log(`  - Created ${file}`);
       }
     }
     
@@ -319,15 +324,35 @@ async function createApp(targetPath, dataFile) {
 
 // Parse command line arguments
 const args = process.argv.slice(2);
-const targetPath = args[0];
+const appName = args[0];
 const dataFile = args[1]; // Optional data file path
 
-if (!targetPath) {
-  console.error('Error: Please provide a target directory');
-  console.error('Usage: node create-app.js <target-directory> [data-file]');
-  console.error('  target-directory: Path where the app should be created');
-  console.error('  data-file:       Optional path to a data file to copy to resources/');
+// Validate app name
+if (!appName) {
+  console.error('Error: Please provide an app name');
+  console.error('Usage: node create-app.js <app-name> [data-file]');
+  console.error('  app-name:  Name for your application (will be created in apps/ directory)');
+  console.error('  data-file: Optional path to a data file to copy to resources/');
   process.exit(1);
 }
+
+// Create the target path inside the apps directory
+const targetPath = join(APPS_DIR, appName);
+
+// Check if target directory already exists
+if (existsSync(targetPath)) {
+  console.error(`Error: Directory ${targetPath} already exists`);
+  console.error('Please choose a different app name or delete the existing directory');
+  process.exit(1);
+}
+
+// Create the apps directory if it doesn't exist
+await fs.promises.mkdir(APPS_DIR, { recursive: true });
+
+// Create the app directory and required subdirectories
+console.log(`Creating new application in ${targetPath}`);
+await fs.promises.mkdir(targetPath, { recursive: true });
+await fs.promises.mkdir(join(targetPath, 'resources'), { recursive: true });
+await fs.promises.mkdir(join(targetPath, 'data-model'), { recursive: true });
 
 createApp(targetPath, dataFile);

@@ -135,10 +135,10 @@ export class ClientModel extends EventListener {
    * @returns {string} The full path to the model file
    * @private
    */
-  _getModelPath(modelName) {
+  _getModelImportPath(modelName) {
     // For dynamic imports, we need to use a path that works with the browser's module loading system
     // The path should be relative to the current file's location in the appFramework/model directory
-    return `../../${this._rootFolderPath}/model/${modelName}.js`;
+    return `../../apps/${this._rootFolderPath}/model/${modelName}.js`;
   }
 
   /**
@@ -147,11 +147,11 @@ export class ClientModel extends EventListener {
    * @returns {string} The full path to the data model file
    * @private
    */
-  _getDataModelPath(modelName) {
+  _getDataModelFetchPath(modelName) {
     // For fetch requests, we need to use a path that works with the browser's fetch API
     // The path should be relative to the web root when served by live-server
     // Since live-server serves from the gQSPSimConfig directory, we need to go up one level
-    return `../${this._rootFolderPath}/data-model/${modelName}.json`;
+    return `/apps/${this._rootFolderPath}/data-model/${modelName}.json`;
   }
   
   /**
@@ -165,12 +165,11 @@ export class ClientModel extends EventListener {
     
     try {
       // The path to the model index file relative to the current file
-      const indexPath = `../../${this._rootFolderPath}/model/index.js`;
+      const indexPath = this._getModelImportPath('index');
       console.log(`Loading model index from: ${indexPath}`);
       
-      // First, load the index.js file which exports all models
-      const indexModule = await import(/* @vite-ignore */ new URL(indexPath, import.meta.url).href);
-      
+      // Dynamic import using relative path
+      const indexModule = await import(indexPath);
       // Get all exported model names (excluding default exports)
       const modelNames = Object.keys(indexModule).filter(key => key !== 'default');
       //console.log(`Found ${modelNames.length} models in index: ${modelNames.join(', ')}`);
@@ -211,7 +210,7 @@ export class ClientModel extends EventListener {
         
         try {
           // Load the model definition
-          const dataModelPath = this._getDataModelPath(className);
+          const dataModelPath = this._getDataModelFetchPath(className);
           console.log(`Loading definition for ${className} from: ${dataModelPath}`);
           
           const response = await fetch(new URL(dataModelPath, window.location.origin + window.location.pathname));

@@ -54,10 +54,6 @@ Thumbs.db
 coverage/
 .nyc_output/
 
-# Workspace specific
-**/node_modules/
-!node_modules/
-
 # Local development
 .cache/
 .temp/
@@ -80,6 +76,9 @@ yarn.lock
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Apps
+apps/
 
 # Prompt logs
 promptLog*

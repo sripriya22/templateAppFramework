@@ -1,18 +1,19 @@
-# Data Model Framework Application
+# Template App Framework Application
 
-This is a template application created with the Data Model Framework, designed to work with MATLAB integration.
+This is a template application created with the Template App Framework, designed to work with MATLAB integration.
 
 ## Quick Start with Cascade
 
 Copy and paste the following prompt into Cascade, then follow the interactive steps:
 
 ```
-I need to create a new application using the Data Model Framework. Please help me complete the setup by following the steps in this README exactly as written. Do not change any existing code in the project folder or create any new files apart from those created through these instructions. Here are the variables you'll need:
+I need to create a new application using the Template App Framework. Please help me complete the setup by following the steps in this README exactly as written. Do not change any existing code in the project folder or create any new files apart from those created explicitly through these instructions. If a command fails, report back but do not try to find a workaround without explicitly checking in. Here are the variables you'll need:
 
 PROJECT_ROOT_FOLDER="templateAppFramework"    # The root folder of the project;
                                                 must contain the `appFramework` "library" folder
 APP_FOLDER_NAME="myApp"                       # The name for your application folder
-ROOT_CLASS_NAME="MyRootModel"                 # The name for your root model class
+                                                (will be created in the `apps/` directory)
+ROOT_CLASS_NAME="RootModel"                   # The name for your root model class
 APP_TITLE="My Application"                    # The display name of your application
 EXAMPLE_OBJECT_PATH="resources/example.json"  # Path to your example object file
 
@@ -25,8 +26,11 @@ Please proceed with the setup steps in the README. If you encounter any issues, 
 From the project root directory, `$PROJECT_ROOT_FOLDER`, run:
 
 ```bash
-node appGenerator/utils/create-app.js $APP_FOLDER_NAME $EXAMPLE_OBJECT_PATH
+# This will create your app in the apps/ directory
+node appGenerator/utils/create-app.js $APP_NAME $EXAMPLE_OBJECT_PATH
 ```
+
+Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_NAME` directory.
 
 ### Step 2: Create Data Model Definitions
 Use the following prompt to interactively create the data-model JSONs:

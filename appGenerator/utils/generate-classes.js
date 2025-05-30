@@ -107,7 +107,7 @@ function sortDefinitionsByDependencies(definitions) {
  */
 function generateClassFile(className, baseClassName) {
     const importPath = baseClassName === 'AbstractModelObject' 
-        ? '../../appFramework/model/AbstractModelObject.js'  // Absolute path from web root
+        ? '/appFramework/model/AbstractModelObject.js'  // Absolute path from web root
         : `./${baseClassName}.js`;
     
     return `// Auto-generated model class
@@ -209,7 +209,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const appDirArg = args.length > 0 ? args[0] : '.';
     
     // Resolve paths relative to current working directory
-    const appDir = resolve(process.cwd(), appDirArg);
+    // Include 'apps' directory in the path
+    const appDir = resolve(process.cwd(), 'apps', appDirArg);
     const outputDir = resolve(appDir, 'model');
     const sourceDir = resolve(appDir, 'data-model');
     console.log("appDir:", appDir);
