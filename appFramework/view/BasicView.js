@@ -4,12 +4,32 @@ import { ModelPanel } from '../../appFramework/view/components/ModelPanel.js';
 import { ModelInspector } from '../../appFramework/view/components/ModelInspector.js';
 import { JSONViewer } from '../../appFramework/view/components/JSONViewer.js';
 import { LogConsole } from '../../appFramework/view/components/LogConsole.js';
+import { loadComponentConfig } from '../utils/ConfigLoader.js';
 
 /**
  * Example app specific View implementation
  * Handles the layout and components specific to the example application
  */
-class BasicView extends AbstractView {
+export class BasicView extends AbstractView {
+    /**
+     * Create a new BasicView instance
+     * @param {Object} options - Configuration options
+     * @param {Object} options.app - The application instance (required)
+     * @param {HTMLElement|string} [options.container=document.body] - Container element or selector to append the view to
+     * @param {string} [options.title=''] - Title of the view
+     * @param {Object} [options.componentConfigs={}] - Configuration objects for components
+     */
+    constructor(options = {}) {
+        // Extract componentConfigs from options
+        const { componentConfigs = {}, ...viewOptions } = options;
+        
+        // Call parent constructor with view options
+        super(viewOptions);
+        
+        // Store component configurations
+        this._componentConfigs = componentConfigs;
+    }
+    
     /**
      * Set up the layout and components specific to the example application
      * @private
@@ -19,12 +39,12 @@ class BasicView extends AbstractView {
             // Call parent's _setupLayout first
             super._setupLayout();
             
-            // Create components
-            const toolstrip = new Toolstrip(this);
-            const modelPanel = new ModelPanel(this);
-            const modelInspector = new ModelInspector(this);
-            const jsonViewer = new JSONViewer(this);
-            const logConsole = new LogConsole(this);
+            // Create components with configurations if available
+            const toolstrip = new Toolstrip(this, this._componentConfigs.Toolstrip);
+            const modelPanel = new ModelPanel(this, this._componentConfigs.ModelPanel);
+            const modelInspector = new ModelInspector(this, this._componentConfigs.ModelInspector);
+            const jsonViewer = new JSONViewer(this, this._componentConfigs.JSONViewer);
+            const logConsole = new LogConsole(this, this._componentConfigs.LogConsole);
             
             // Store references to components
             this.components = {
@@ -79,5 +99,5 @@ class BasicView extends AbstractView {
     }
 }
 
-// Export the BasicView class as default
+// Export the BasicView class as default for backward compatibility
 export default BasicView;

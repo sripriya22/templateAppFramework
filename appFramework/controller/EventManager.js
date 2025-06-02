@@ -109,20 +109,28 @@ class EventManager {
    * Dispatch an event to all registered listeners
    * @param {string} eventType - The type of event to dispatch (must be a valid EventType)
    * @param {Object} [data={}] - Event data to pass to the listeners
+   * @throws {Error} If the event type is invalid or the event data doesn't match the schema
    */
   dispatchEvent(eventType, data = {}) {
     if (!eventType) {
-      console.error('Cannot dispatch event: eventType is required');
-      return;
+      const error = new Error('Cannot dispatch event: eventType is required');
+      console.error(error);
+      throw error; // Throw hard error to expose implementation bugs
     }
 
     let eventData;
     try {
       // Create and validate the event data using EventTypes
+      // This will throw if the event type is not defined in EventTypes or if the data doesn't match the schema
       eventData = EventTypes.create(eventType, data);
     } catch (error) {
-      console.error(`Failed to create event ${eventType}:`, error);
-      return;
+      // Add more context to the error to help debugging
+      const enhancedError = new Error(`Failed to dispatch event '${eventType}': ${error.message}`);
+      enhancedError.originalError = error;
+      enhancedError.eventType = eventType;
+      enhancedError.eventData = data;
+      console.error(enhancedError);
+      throw enhancedError; // Throw hard error to expose implementation bugs
     }
 
     // Get all listeners for this event type
@@ -160,23 +168,6 @@ class EventManager {
         }
       });
     }
-  }
-
-  /**
-   * Add a one-time event listener
-   * @param {string} eventType - The type of event to listen for
-   * @param {Function} listener - The callback function
-   * @returns {Function} A function to remove this listener
-   */
-  once(eventType, listener) {
-    if (this.onceListeners.has(eventType)) {
-      console.warn(`Overwriting existing one-time listener for ${eventType}`);
-    }
-    
-    this.onceListeners.set(eventType, listener);
-    
-    // Return a function to remove this one-time listener
-    return () => this.onceListeners.delete(eventType);
   }
 
   /**

@@ -1,0 +1,102 @@
+{
+  "title": "Model Panel Configuration",
+  "description": "Configuration for the ModelPanel component",
+  "propertyGroups": [
+    {
+      "id": "general",
+      "title": "General Properties",
+      "description": "General properties of the model",
+      "properties": [
+        {
+          "path": "name",
+          "label": "Name",
+          "widget": "text",
+          "order": 1,
+          "help": "The name of the model"
+        },
+        {
+          "path": "description",
+          "label": "Description",
+          "widget": "textarea",
+          "rows": 3,
+          "order": 2,
+          "help": "A description of the model"
+        }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Settings",
+      "description": "Model settings and configuration",
+      "properties": [
+        {
+          "path": "enabled",
+          "label": "Enabled",
+          "widget": "checkbox",
+          "order": 1,
+          "help": "Whether the model is enabled"
+        },
+        {
+          "path": "priority",
+          "label": "Priority",
+          "widget": "number",
+          "min": 0,
+          "max": 100,
+          "step": 1,
+          "order": 2,
+          "help": "The priority of the model (0-100)"
+        },
+        {
+          "path": "type",
+          "label": "Type",
+          "widget": "select",
+          "options": [
+            {
+              "value": "standard",
+              "label": "Standard"
+            },
+            {
+              "value": "advanced",
+              "label": "Advanced"
+            },
+            {
+              "value": "custom",
+              "label": "Custom"
+            }
+          ],
+          "order": 3,
+          "help": "The type of model"
+        }
+      ]
+    }
+  ],
+  "arrays": [
+    {
+      "path": "parameters",
+      "title": "Parameters",
+      "description": "Model parameters",
+      "itemConfig": {
+        "properties": [
+          {
+            "path": "name",
+            "label": "Name",
+            "widget": "text",
+            "order": 1
+          },
+          {
+            "path": "value",
+            "label": "Value",
+            "widget": "number",
+            "order": 2
+          },
+          {
+            "path": "description",
+            "label": "Description",
+            "widget": "text",
+            "order": 3
+          }
+        ]
+      }
+    }
+  ]
+}

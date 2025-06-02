@@ -4,16 +4,28 @@
  * @namespace
  */
 export const EventTypes = Object.freeze({
-  // Event Type Constants
-  CLIENT_MODEL_UPDATED: 'CLIENT_MODEL_UPDATED',
-  SERVER_MODEL_UPDATED: 'SERVER_MODEL_UPDATED',
-  CLIENT_ERROR: 'CLIENT_ERROR',
-  SERVER_ERROR: 'SERVER_ERROR',
-  CLIENT_WARNING: 'CLIENT_WARNING',
-  SERVER_WARNING: 'SERVER_WARNING',
-
-  // Schema Definitions
-  _schemas: {
+  /**
+   * Event type constants
+   * These are the string values that should be used when dispatching events
+   */
+  CLIENT_ERROR: 'client_error',
+  CLIENT_MODEL_UPDATED: 'client_model_updated',
+  APP_INITIALIZED: 'app_initialized',
+  VIEW_TO_MODEL_PROPERTY_CHANGED: 'view_to_model_property_changed',
+  MODEL_TO_VIEW_PROPERTY_CHANGED: 'model_to_view_property_changed',
+  INSTANCE_CREATED: 'instance_created',
+  INSTANCE_DELETED: 'instance_deleted',
+  SERVER_ERROR: 'server_error',
+  SERVER_MODEL_UPDATED: 'server_model_updated',
+  CLIENT_WARNING: 'client_warning',
+  SERVER_WARNING: 'server_warning',
+  
+  /**
+   * Event definitions map
+   * Maps event type strings to their schema definitions
+   * This is the single source of truth for event types and schemas
+   */
+  _eventDefinitions: {
     // Model Update Event
     CLIENT_MODEL_UPDATED: {
       required: {
@@ -21,6 +33,70 @@ export const EventTypes = Object.freeze({
       },
       optional: {
         // Removed Source and Timestamp as they'll be handled by the event system
+      }
+    },
+    
+    // App Initialized Event
+    APP_INITIALIZED: {
+      required: {},
+      optional: {
+        appName: { type: 'string', description: 'The name of the application' },
+        version: { type: 'string', description: 'The version of the application' },
+        timestamp: { type: 'string', description: 'Timestamp when the app was initialized' }
+      }
+    },
+    
+    // View-to-Model Property Changed Event (when view updates model)
+    VIEW_TO_MODEL_PROPERTY_CHANGED: {
+      required: {
+        path: { type: 'string', description: 'The path to the property that changed' },
+        value: { type: 'any', description: 'The new value of the property' }
+      },
+      optional: {
+        oldValue: { type: 'any', description: 'The previous value of the property' },
+        model: { type: 'object', description: 'The model object containing the property' },
+        source: { type: 'string', description: 'The source of the change (e.g., "view", "binding", "component")' },
+        uid: { type: 'number', description: 'The unique ID of the model instance' },
+        className: { type: 'string', description: 'The class name of the model' },
+        property: { type: 'string', description: 'The property name that changed' }
+      }
+    },
+    
+    // Model-to-View Property Changed Event (when model updates itself)
+    MODEL_TO_VIEW_PROPERTY_CHANGED: {
+      required: {
+        path: { type: 'string', description: 'The path to the property that changed' },
+        value: { type: 'any', description: 'The new value of the property' }
+      },
+      optional: {
+        oldValue: { type: 'any', description: 'The previous value of the property' },
+        model: { type: 'object', description: 'The model object that contains the property' },
+        source: { type: 'string', description: 'The source of the change (e.g., "api", "calculation")' }
+      }
+    },
+    
+    // Instance Created Event
+    INSTANCE_CREATED: {
+      required: {
+        instance: { type: 'object', description: 'The created model instance' },
+        className: { type: 'string', description: 'The class name of the created instance' }
+      },
+      optional: {
+        uid: { type: 'number', description: 'The unique ID of the created instance' },
+        parent: { type: 'object', description: 'The parent model object (if any)' },
+        parentPath: { type: 'string', description: 'The path to the parent property' }
+      }
+    },
+    
+    // Instance Deleted Event
+    INSTANCE_DELETED: {
+      required: {
+        uid: { type: 'number', description: 'The unique ID of the deleted instance' },
+        className: { type: 'string', description: 'The class name of the deleted instance' }
+      },
+      optional: {
+        parent: { type: 'object', description: 'The parent model object (if any)' },
+        parentPath: { type: 'string', description: 'The path to the parent property' }
       }
     },
     
@@ -63,11 +139,36 @@ export const EventTypes = Object.freeze({
    * @private
    */
   _getSchema(eventType) {
-    const schema = this._schemas[eventType];
-    if (!schema) {
+    // Validate that the event type is not null or undefined
+    if (!eventType) {
+      throw new Error('Invalid event type: null or undefined');
+    }
+    
+    // Validate that this is a known event type
+    const isValidEventType = Object.values(this).includes(eventType);
+    if (!isValidEventType) {
       throw new Error(`Unknown event type: ${eventType}`);
     }
-    return typeof schema === 'string' ? this._schemas[schema] : schema;
+    
+    // Find the schema key (constant name) for this event type
+    const schemaKey = Object.keys(this).find(key => 
+      !key.startsWith('_') && // Skip private properties
+      typeof this[key] !== 'function' && // Skip methods
+      this[key] === eventType
+    );
+    
+    if (!schemaKey) {
+      throw new Error(`Could not find schema key for event type: ${eventType}`);
+    }
+    
+    // Get the schema from the event definitions
+    const schema = this._eventDefinitions[schemaKey];
+    if (!schema) {
+      throw new Error(`Schema not defined for event type: ${eventType} (key: ${schemaKey})`);
+    }
+    
+    // Handle schema references (when one schema references another)
+    return typeof schema === 'string' ? this._eventDefinitions[schema] : schema;
   },
 
   /**
@@ -75,13 +176,25 @@ export const EventTypes = Object.freeze({
    * @param {string} type - The event type (must be one of the defined constants)
    * @param {Object} [data={}] - The event data
    * @returns {Object} The formatted event object with all required and optional fields
-   * @throws {Error} If required fields are missing or invalid
+   * @throws {Error} If required fields are missing or invalid or if the event type is unknown
    */
   create(type, data = {}) {
-    const schema = this._getSchema(type);
-    const event = { ...data };
+    // Validate event type first
+    if (!type) {
+      throw new Error('Invalid event type: null or undefined');
+    }
     
-    // Add default null for missing optional fields
+    // Get the schema for this event type (will throw if invalid)
+    const schema = this._getSchema(type);
+    
+    // Create a new event object with the provided data
+    const event = { 
+      type, // Always include the event type
+      timestamp: new Date().toISOString(), // Add timestamp for all events
+      ...data 
+    };
+    
+    // Add default values for missing optional fields
     for (const [field, { type: fieldType }] of Object.entries(schema.optional || {})) {
       if (!(field in event)) {
         event[field] = fieldType === 'string' ? '' : 
@@ -109,22 +222,43 @@ export const EventTypes = Object.freeze({
    */
   _validateRequiredFields(event, type, schema) {
     if (!event || typeof event !== 'object') {
-      throw new Error('Event must be an object');
+      throw new Error(`Event for '${type}' must be an object`);
     }
     
     // Check required fields
     for (const [field, { type: expectedType, description }] of Object.entries(schema.required || {})) {
+      // Check if field exists
       if (!(field in event)) {
-        throw new Error(`Missing required field '${field}' (${description})`);
+        throw new Error(`Event '${type}': Missing required field '${field}' (${description})`);
       }
       
-      // Check field type if specified
-      if (expectedType !== 'any' && 
-          event[field] !== null && 
-          event[field] !== undefined && 
-          typeof event[field] !== expectedType) {
-        throw new Error(`Field '${field}' must be of type '${expectedType}'`);
+      // Check if field is null or undefined when it shouldn't be
+      if (event[field] === null || event[field] === undefined) {
+        throw new Error(`Event '${type}': Field '${field}' cannot be null or undefined`);
       }
+      
+      // Check field type if specified (and not 'any')
+      if (expectedType !== 'any' && 
+          typeof event[field] !== expectedType && 
+          // Special handling for arrays since typeof [] is 'object'
+          !(expectedType === 'array' && Array.isArray(event[field]))) {
+        throw new Error(`Event '${type}': Field '${field}' must be of type '${expectedType}', got ${typeof event[field]}`);
+      }
+    }
+    
+    // For better debugging, check if there are any unexpected fields
+    const allValidFields = new Set([
+      'type',      // Added by our create method
+      'timestamp', // Added by our create method
+      ...Object.keys(schema.required || {}),
+      ...Object.keys(schema.optional || {})
+    ]);
+    
+    // Find any fields in the event that aren't in our schema
+    const unexpectedFields = Object.keys(event).filter(field => !allValidFields.has(field));
+    if (unexpectedFields.length > 0) {
+      // Just log a warning, don't throw an error
+      console.warn(`Event '${type}': Unexpected fields: ${unexpectedFields.join(', ')}`);
     }
   }
 });

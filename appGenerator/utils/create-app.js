@@ -120,6 +120,27 @@ async function createApp(targetPath, dataFile) {
       }
     }
     
+    // Copy view configuration files
+    console.log('Copying view configuration files...');
+    const configSourceDir = join(TEMPLATES_DIR, 'view', 'config');
+    const configDestDir = join(targetPath, 'view', 'config');
+    
+    // Create the config directory if it doesn't exist
+    if (!existsSync(configDestDir)) {
+      await mkdir(configDestDir, { recursive: true });
+      console.log(`  - Created directory: view/config/`);
+    }
+    
+    // Copy ModelPanelConfig.json
+    const configSource = join(configSourceDir, 'ModelPanelConfig.json');
+    const configDest = join(configDestDir, 'ModelPanelConfig.json');
+    
+    if (existsSync(configSource)) {
+      await copyWithDirs(configSource, configDest);
+    } else {
+      console.warn(`  - Warning: ModelPanelConfig.json template not found at ${configSource}`);
+    }
+    
     // Note: View files are now loaded directly from appFramework
     console.log('Using view files from appFramework directory');
     
@@ -136,7 +157,8 @@ async function createApp(targetPath, dataFile) {
       'view',
       'controller',
       'data-model',
-      'resources'
+      'resources',
+      'view/config'
     ];
     
     for (const dir of dirsToCreate) {

@@ -9,6 +9,7 @@
 // Import from the appFramework package using relative paths
 import AbstractApp from '../../../appFramework/controller/AbstractApp.js';
 import BasicView from '../../../appFramework/view/BasicView.js';
+import { loadComponentConfig } from '../../../appFramework/utils/ConfigLoader.js';
 
 export class App extends AbstractApp {
   /**
@@ -71,14 +72,30 @@ export class App extends AbstractApp {
 
   /**
    * Create the view instance
-   * @returns {BasicView} The view instance
+   * @returns {Promise<BasicView>|BasicView} The view instance or a promise that resolves to the view instance
    */
-  createView() {
+  async createView() {
     const container = (this.config && this.config.container) || '#app';
+    
+    // Load component configurations
+    let modelPanelConfig = null;
+    try {
+      // Try to load ModelPanel configuration
+      modelPanelConfig = await loadComponentConfig('ModelPanel', this.getRootFolderPath());
+      console.log('Loaded ModelPanel configuration');
+    } catch (error) {
+      console.warn('Could not load ModelPanel configuration:', error);
+    }
+    
+    // Create view with component configurations
     return new BasicView({
       app: this,
       container: container,
-      title: this.getAppTitle()
+      title: this.getAppTitle(),
+      componentConfigs: {
+        ModelPanel: modelPanelConfig
+        // Add other component configs as needed
+      }
     });
   }
 

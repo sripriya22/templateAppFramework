@@ -64,12 +64,13 @@ export class View extends EventListener {
      * @returns {Array<string>} Array of event types
      */
     getSubscribedEvents() {
+        // Only include events that are actually defined in EventTypes
         return [
             EventTypes.CLIENT_MODEL_UPDATED,
             EventTypes.CLIENT_ERROR,
-            EventTypes.SERVER_ERROR,
-            EventTypes.CLIENT_WARNING,
-            EventTypes.SERVER_WARNING
+            EventTypes.SERVER_ERROR
+            // CLIENT_WARNING and SERVER_WARNING are not defined in EventTypes
+            // and were causing null/undefined values in the events array
         ];
     }
 
@@ -95,6 +96,14 @@ export class View extends EventListener {
      */
     handle_server_error(event) {
         this.log(`Server error: ${event.Message}`, 'error', event.data.Error);
+    }
+    
+    /**
+     * Get the application instance
+     * @returns {Object} The application instance
+     */
+    getApp() {
+        return this._app;
     }
     
     /**

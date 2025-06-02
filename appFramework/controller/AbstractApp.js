@@ -3,9 +3,10 @@
  * Provides abstract methods for creating model and view instances
  */
 import { EventManager } from './EventManager.js';
-import ClientModel from '../model/ClientModel.js';
+import { ClientModel } from '../model/ClientModel.js';
 import { MockMATLABComponent } from './MockMATLABComponent.js';
 import { EventTypes } from './EventTypes.js';
+import { BindingManager } from '../binding/BindingManager.js';
 
 /**
  * Abstract base class for applications
@@ -60,6 +61,9 @@ export class AbstractApp {
     /** @private */
     this._initializationPromise = null;
     
+    /** @private */
+    this._bindingManager = null;
+    
     // Bind methods
     this._onServerEvent = this._onServerEvent.bind(this);
     this._onClientEvent = this._onClientEvent.bind(this);
@@ -111,7 +115,7 @@ export class AbstractApp {
 
   /**
    * Create the view instance - can be overridden by subclasses
-   * @returns {View} The view instance
+   * @returns {Promise<View>|View} The view instance or a promise that resolves to the view instance
    * @protected
    */
   createView() {
@@ -170,34 +174,43 @@ export class AbstractApp {
    */
   async _initApp() {
     try {
-      // Initialize event manager
-      this._eventManager = new EventManager();
-
+      // Create model
+      this._model = this.createModel();
+      console.log('Model created');
+      
+      // Initialize model
+      await this._model.init();
+      console.log('Model initialized');
+      
+      // Create binding manager
+      this._bindingManager = new BindingManager({ app: this });
+      console.log('Binding manager created');
+      
+      // Create view (which may return a Promise)
+      const viewResult = this.createView();
+      
+      // Handle both synchronous and asynchronous view creation
+      this._view = viewResult instanceof Promise ? await viewResult : viewResult;
+      console.log('View created');
+      
+      // Initialize view
+      await this._view.init();
+      console.log('View initialized');
+      
       // Set up event subscriptions
       this._setupEventSubscriptions();
-
-      // Create the model 
-      this._model = this.createModel();
-
-      // Create the view with the app as context
-      this._view = this.createView();
+      console.log('Event subscriptions set up');
       
-      // Initialize the view first
-      await this._view.init();
-      
-      // Initialize the model
-      await this._model.init();
-
-      // The view handles its own container management
-      // We don't need to append it here as it's already done in the View constructor
-
-      // Load test data if not connected to server
-      if (!this._isConnectedToServer()) {
-        // TODO: uncomment if you want automatic loading of test data when unconnected to the server
-        //await this.loadTestData();
-      }
-
+      // Mark as initialized
       this._initialized = true;
+      console.log('App initialized successfully');
+      
+      // Dispatch initialization event
+      // Note: We don't need to manually add timestamp as our enhanced EventTypes.create method adds it automatically
+      this.dispatchClientEvent(EventTypes.APP_INITIALIZED, {
+        appName: this.constructor.name,
+        version: this.version || '1.0.0'
+      });
       console.log('App initialized successfully');
     } catch (error) {
       console.error('Error initializing app:', error);
@@ -331,8 +344,7 @@ export class AbstractApp {
       this.dispatchClientEvent(
         EventTypes.SERVER_MODEL_UPDATED,
         { 
-          Data: testData,  
-          Timestamp: new Date().toISOString()
+          Data: testData
         }
       );
       console.log('Dispatched SERVER_MODEL_UPDATED event with test data');
@@ -549,11 +561,35 @@ export class AbstractApp {
   }
   
   /**
+   * Get the model instance (method version)
+   * @returns {ClientModel} The model
+   */
+  getModel() {
+    return this._model;
+  }
+  
+  /**
    * Get the view instance
    * @returns {View} The view
    */
   get view() {
     return this._view;
+  }
+  
+  /**
+   * Get the binding manager
+   * @returns {BindingManager} The binding manager
+   */
+  get bindingManager() {
+    return this._bindingManager;
+  }
+  
+  /**
+   * Get the binding manager (method version)
+   * @returns {BindingManager} The binding manager
+   */
+  getBindingManager() {
+    return this._bindingManager;
   }
   
   /**
@@ -581,12 +617,17 @@ export class AbstractApp {
       this._model.destroy();
     }
     
+    if (this._bindingManager && typeof this._bindingManager.destroy === 'function') {
+      this._bindingManager.destroy();
+    }
+    
     this._eventManager.removeAllListeners();
     
     this._initialized = false;
     this._htmlComponent = null;
     this._model = null;
     this._view = null;
+    this._bindingManager = null;
   }
 }
 

@@ -44,7 +44,7 @@ export class ClientModel extends EventListener {
     this._rootFolderPath = rootFolderPath;
     
     /** @private */
-    this.manager = new ModelClassDefinitionManager();
+    this._modelManager = new ModelClassDefinitionManager();
     
     /** @private */
     this.instances = new Map();
@@ -82,7 +82,7 @@ export class ClientModel extends EventListener {
       this._printRegistrationDiagnostics();
       
       // Verify root class is registered
-      if (!this.manager.isClassRegistered(this._rootClassName)) {
+      if (!this._modelManager.isClassRegistered(this._rootClassName)) {
         throw new Error(`Root class '${this._rootClassName}' is not registered`);
       }
     } catch (error) {
@@ -98,16 +98,16 @@ export class ClientModel extends EventListener {
    */
   _printRegistrationDiagnostics() {
     console.log('--- Class Registration Diagnostics ---');
-    const classNames = this.manager.getAllRegisteredClassNames();
+    const classNames = this._modelManager.getAllRegisteredClassNames();
     console.log(`Total registered classes: ${classNames.length}`);
     
     for (const className of classNames) {
-      const status = this.manager.getRegistrationStatus(className);
+      const status = this._modelManager.getRegistrationStatus(className);
       console.log(`${className}: Constructor: ${status.hasConstructor ? 'YES' : 'NO'}, Definition: ${status.hasDefinition ? 'YES' : 'NO'}`);
     }
     
     // Check root class specifically
-    const rootStatus = this.manager.getRegistrationStatus(this._rootClassName);
+    const rootStatus = this._modelManager.getRegistrationStatus(this._rootClassName);
     if (!rootStatus.registered) {
       console.warn(`WARNING: Root class '${this._rootClassName}' is not registered at all!`);
     } else if (!rootStatus.hasDefinition) {
@@ -200,7 +200,7 @@ export class ClientModel extends EventListener {
         this._modelClasses[className] = ModelClass;
         
         // Register the class with the manager
-        this.manager.registerClass(className, ModelClass);
+        this._modelManager.registerClass(className, ModelClass);
         console.log(`Registered model class: ${className}`);
       }
       
@@ -225,7 +225,7 @@ export class ClientModel extends EventListener {
           ModelClass.modelDefinition = definition;
           
           // Register the definition with the manager
-          this.manager.registerClassDefinition(className, definition, ModelClass);
+          this._modelManager.registerClassDefinition(className, definition, ModelClass);
           console.log(`Successfully registered definition for ${className}`);
           
           return { className, success: true };
@@ -245,20 +245,20 @@ export class ClientModel extends EventListener {
       }
       
       // Verify the root class is registered and has a definition
-      if (!this.manager.isClassRegistered(this._rootClassName)) {
+      if (!this._modelManager.isClassRegistered(this._rootClassName)) {
         throw new Error(`Root class ${this._rootClassName} was not registered!`);
       }
       
-      const rootClassDef = this.manager.getDefinition(this._rootClassName);
+      const rootClassDef = this._modelManager.getDefinition(this._rootClassName);
       if (!rootClassDef) {
         throw new Error(`No definition found for root class: ${this._rootClassName}`);
       }
       
       // Verify all classes are properly registered
       for (const className of Object.keys(this._modelClasses)) {
-        if (!this.manager.isClassRegistered(className)) {
+        if (!this._modelManager.isClassRegistered(className)) {
           // Re-register the class if it's missing
-          this.manager.registerClass(className, this._modelClasses[className]);
+          this._modelManager.registerClass(className, this._modelClasses[className]);
           console.warn(`Re-registered missing class: ${className}`);
         }
       }
@@ -384,7 +384,15 @@ export class ClientModel extends EventListener {
     this._data = null;
     this._rootInstance = null;
   }
-  
+
+  /**
+   * Get the model class definition manager
+   * @returns {ModelClassDefinitionManager} The model class definition manager
+   */
+  get modelManager() {
+    return this._modelManager;
+  }
+
   /**
    * Create a model instance
    * @param {string} className - The name of the class to instantiate
@@ -396,7 +404,7 @@ export class ClientModel extends EventListener {
       throw new Error('Class name is required');
     }
     
-    if (!this.manager) {
+    if (!this._modelManager) {
       throw new Error('ModelClassDefinitionManager not initialized');
     }
     
@@ -405,16 +413,16 @@ export class ClientModel extends EventListener {
       this._ensureModelRegistration();
       
       // Get the class constructor
-      const ObjectClass = this.manager.getClass(className);
+      const ObjectClass = this._modelManager.getClass(className);
       if (!ObjectClass) {
         // Log all registered classes for debugging
-        const registeredClasses = this.manager.getAllRegisteredClassNames();
+        const registeredClasses = this._modelManager.getAllRegisteredClassNames();
         console.error(`Class not found: ${className}. Registered classes: ${registeredClasses.join(', ')}`);
         throw new Error(`Class not found: ${className}`);
       }
       
       // Create the instance using the class constructor and pass the manager
-      const instance = new ObjectClass(data, this.manager);
+      const instance = new ObjectClass(data, this._modelManager);
       
       // Store the instance in our map
       this.instances.set(instance.id, instance);
@@ -522,28 +530,66 @@ export class ClientModel extends EventListener {
    */
   updateInstanceFromView(uid, propName, value) {
     try {
+      // Find the instance
       const instance = this.getInstance(uid);
       if (!instance) {
         console.warn(`Instance with ID ${uid} not found`);
-        
-        // Notify about the missing instance
-        if (this._app?.eventManager) {
-          this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
-            ID: 'INSTANCE_NOT_FOUND',
-            Message: `Instance with ID ${uid} not found`
-          });
-        }
-        
         return null;
       }
       
-      // Update the instance with the new data
+      // Get the class name
+      const className = instance.constructor.name;
+      
+      // Validate property exists on the class
+      if (!this._modelManager.hasProperty(className, propName)) {
+        console.warn(`Property '${propName}' does not exist on class '${className}'`);
+        return null;
+      }
+      
+      // Get property info to validate the value
+      const propInfo = this._modelManager.getPropertyInfo(className, propName);
+      if (!propInfo) {
+        console.warn(`Property info for '${className}.${propName}' not found`);
+        return null;
+      }
+      
+      // TODO: Validate value against property type
+      
+      // Store old value for comparison
+      const oldValue = instance[propName];
+      
+      // Update the property
       instance[propName] = value;
       
-      // Dispatch model updated event
+      // Add to pending changes
+      if (!this._pendingChanges.has(uid)) {
+        this._pendingChanges.set(uid, new Map());
+      }
+      this._pendingChanges.get(uid).set(propName, value);
+      
+      // Dispatch model property changed event
       if (this._app?.eventManager) {
-        this._app.eventManager.dispatchEvent(EventTypes.CLIENT_MODEL_UPDATED, {
-          Data: instance
+        // Create a path for the property (e.g., 'parameters.0.name')
+        const path = `${className.toLowerCase()}.${uid}.${propName}`;
+        
+        // Dispatch the property change event
+        this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+          path: path,
+          oldValue: oldValue,
+          newValue: value,
+          instance: instance,
+          uid: uid,
+          className: className,
+          property: propName,
+          source: 'view'
+        });
+        
+        // Also dispatch the general model updated event
+        this._app.eventManager.dispatch(EventTypes.CLIENT_MODEL_UPDATED, {
+          uid: uid,
+          className: className,
+          property: propName,
+          value: value
         });
       }
       
@@ -649,18 +695,18 @@ export class ClientModel extends EventListener {
       throw new Error('Data must be an object');
     }
     
-    if (!this.manager) {
+    if (!this._modelManager) {
       throw new Error('ModelClassDefinitionManager not initialized');
     }
     
     // Verify the root class is registered
-    if (!this.manager.isClassRegistered(this._rootClassName)) {
+    if (!this._modelManager.isClassRegistered(this._rootClassName)) {
       console.warn(`Root class '${this._rootClassName}' is not registered. Attempting to reload models...`);
       // Try to reload models
       this._ensureModelRegistration();
       
       // Check again after reload attempt
-      if (!this.manager.isClassRegistered(this._rootClassName)) {
+      if (!this._modelManager.isClassRegistered(this._rootClassName)) {
         throw new Error(`Root class '${this._rootClassName}' is not registered after reload attempt`);
       }
     }
@@ -675,11 +721,11 @@ export class ClientModel extends EventListener {
       
       // Log diagnostic information about registered classes
       console.log('--- Class Registration Diagnostics ---');
-      const registeredClasses = this.manager.getAllRegisteredClassNames();
+      const registeredClasses = this._modelManager.getAllRegisteredClassNames();
       console.log(`Total registered classes: ${registeredClasses.length}`);
       
       for (const className of registeredClasses) {
-        const status = this.manager.getRegistrationStatus(className);
+        const status = this._modelManager.getRegistrationStatus(className);
         console.log(`${className}: Constructor: ${status.hasConstructor ? 'YES' : 'NO'}, Definition: ${status.hasDefinition ? 'YES' : 'NO'}`);
       }
       
@@ -688,13 +734,6 @@ export class ClientModel extends EventListener {
       
       // Create root instance from the data
       const rootInstance = this.createInstance(this._rootClassName, data);
-      
-      // Dispatch model updated event
-      if (this._app?.eventManager) {
-        this._app.eventManager.dispatchEvent(EventTypes.CLIENT_MODEL_UPDATED, {
-          Data: rootInstance
-        });
-      }
       
       return rootInstance;
       
@@ -729,7 +768,7 @@ export class ClientModel extends EventListener {
     }
     
     // Verify all required classes are registered
-    const registeredClasses = this.manager.getAllRegisteredClassNames();
+    const registeredClasses = this._modelManager.getAllRegisteredClassNames();
     console.log(`Registered classes before instance creation: ${registeredClasses.join(', ')}`);
   }
   
@@ -745,13 +784,13 @@ export class ClientModel extends EventListener {
       return data;
     }
     
-    if (!this.manager) {
+    if (!this._modelManager) {
       console.error('ModelClassDefinitionManager not initialized');
       return data;
     }
     
     // Verify class registration status
-    const status = this.manager.getRegistrationStatus(className);
+    const status = this._modelManager.getRegistrationStatus(className);
     if (!status.registered) {
       console.warn(`Class not registered: ${className}`);
       return data;
@@ -763,7 +802,7 @@ export class ClientModel extends EventListener {
     }
     
     // Get the class definition
-    const definition = this.manager.getDefinition(className);
+    const definition = this._modelManager.getDefinition(className);
     if (!definition || !definition.Properties) {
       console.warn(`Invalid definition for class: ${className}`);
       return data;
@@ -805,13 +844,13 @@ export class ClientModel extends EventListener {
    * @private
    */
   _getPropertyInfo(className, propName) {
-    if (!this.manager) {
+    if (!this._modelManager) {
       console.error('ModelClassDefinitionManager not initialized');
       return null;
     }
     
     try {
-      return this.manager.getPropertyInfo(className, propName);
+      return this._modelManager.getPropertyInfo(className, propName);
     } catch (error) {
       console.error(`Error getting property info for ${className}.${propName}:`, error);
       return null;
