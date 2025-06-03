@@ -117,10 +117,10 @@ export class ModelInspector extends BaseComponent {
             
             if (node) {
                 // If we found the node, just update that specific node
-                this._updateNodeInTreeTable(node, currentModel, changedPath);
+                this._updateNodeInTreeTable(node, currentModel.getRootInstance(), changedPath);
             } else {
                 // If we couldn't find the node (might be a new property), refresh the entire tree
-                this.treeTable.setData(currentModel, this.customNodeRenderer.bind(this));
+                this.treeTable.setData(currentModel.getRootInstance(), this.customNodeRenderer.bind(this));
             }
         });
     }
