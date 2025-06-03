@@ -37,11 +37,24 @@ export async function loadComponentConfig(componentName, appPath = null) {
  * @returns {string} The app path
  */
 function _getAppPath() {
-  // Get the current script path
+  // First, check if we're loading from a root-level HTML file
+  // by examining the main script tag that loads the app
   const scripts = document.getElementsByTagName('script');
-  const currentScript = scripts[scripts.length - 1].src;
+  for (let i = 0; i < scripts.length; i++) {
+    const scriptSrc = scripts[i].src;
+    if (scriptSrc.includes('/apps/') && scriptSrc.includes('/App.js')) {
+      // This is loading from root-level HTML
+      const urlParts = scriptSrc.split('/');
+      const appIndex = urlParts.indexOf('apps');
+      if (appIndex !== -1 && appIndex + 1 < urlParts.length) {
+        const appName = urlParts[appIndex + 1];
+        return `./apps/${appName}`;
+      }
+    }
+  }
   
-  // Extract the app path from the script URL
+  // If we couldn't find it in script tags, try the last script
+  const currentScript = scripts[scripts.length - 1].src;
   const urlParts = currentScript.split('/');
   const appIndex = urlParts.indexOf('apps');
   
@@ -56,6 +69,14 @@ function _getAppPath() {
   
   if (locationAppIndex !== -1 && locationAppIndex < locationParts.length - 1) {
     return locationParts.slice(0, locationAppIndex + 2).join('/');
+  }
+  
+  // Final fallback for root-level HTML files: check if the HTML filename matches an app name
+  const htmlFileName = window.location.pathname.split('/').pop();
+  if (htmlFileName && htmlFileName.endsWith('.html')) {
+    const potentialAppName = htmlFileName.replace('.html', '');
+    // This is a heuristic - we assume the HTML file is named after the app
+    return `./apps/${potentialAppName}`;
   }
   
   console.warn('Could not determine app path, using current location');

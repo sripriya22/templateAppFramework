@@ -75,7 +75,7 @@ async function createApp(targetPath, dataFile) {
     await mkdir(targetPath, { recursive: true });
     
     // Function to copy a file with directory creation
-    async function copyWithDirs(source, dest) {
+    async function copyWithDirs(source, dest, isAppDir = true) {
       try {
         // Create destination directory if it doesn't exist
         const destDir = dirname(dest);
@@ -87,12 +87,44 @@ async function createApp(targetPath, dataFile) {
         let content = await readFile(source, 'utf8');
         
         // Update paths in the files if needed
-        if (source.endsWith('.js') || source.endsWith('.html')) {
-          // Update import paths to use relative paths from the new app location
+        if (source.endsWith('.js')) {
+          // For JS files, update import paths to use relative paths from the new app location
           content = content.replace(
             /from '(\/|\.\.\/)*appFramework\//g,
-            "from '../../../appFramework/"
+            "from '../../appFramework/"
           );
+        } else if (source.endsWith('.html')) {
+          const appName = basename(targetPath);
+          
+          // Update title
+          content = content.replace(
+            /<title>Application<\/title>/,
+            `<title>${appName}</title>`
+          );
+          
+          if (isAppDir) {
+            // For HTML files in app directory, use relative paths to appFramework
+            content = content.replace(
+              /href="(\.\.\/)*appFramework\/([^"]+)"/g,
+              'href="../../appFramework/$2"'
+            );
+            // Keep the script reference to local App.js
+            content = content.replace(
+              /<script type="module" src="\.\/App\.js"><\/script>/,
+              '<script type="module" src="./App.js"></script>'
+            );
+          } else {
+            // For HTML files in root directory, use direct paths to appFramework
+            content = content.replace(
+              /href="(\.\.\/)*appFramework\/([^"]+)"/g,
+              'href="./appFramework/$2"'
+            );
+            // Update the script reference to point to the app directory
+            content = content.replace(
+              /<script type="module" src="\.\/App\.js"><\/script>/,
+              `<script type="module" src="./apps/${appName}/App.js"></script>`
+            );
+          }
         }
         
         await writeFile(dest, content, 'utf8');
@@ -105,18 +137,34 @@ async function createApp(targetPath, dataFile) {
     
     // Copy main files
     console.log('Copying files...');
+    const appName = basename(targetPath);
+    
     for (const file of FILES_TO_COPY) {
       const source = join(TEMPLATES_DIR, file);
-      const dest = join(targetPath, file);
       
-      if (file.endsWith('/')) {
-        // It's a directory, ensure it's created
-        if (!existsSync(dest)) {
-          await mkdir(dest, { recursive: true });
-          console.log(`  - Created directory: ${file}`);
-        }
+      // For index.html, create both in the app directory and in the root with app-specific name
+      if (file === 'index.html') {
+        // Create in app directory
+        const appDirDest = join(targetPath, file);
+        await copyWithDirs(source, appDirDest, true); // true = app directory version
+        
+        // Create in root directory with app name
+        const rootDest = join(ROOT_PATH, `${appName}.html`);
+        await copyWithDirs(source, rootDest, false); // false = root directory version
+        console.log(`  - Created ${appName}.html in root directory`);
       } else {
-        await copyWithDirs(source, dest);
+        // For other files, just copy to the app directory
+        const dest = join(targetPath, file);
+        
+        if (file.endsWith('/')) {
+          // It's a directory, ensure it's created
+          if (!existsSync(dest)) {
+            await mkdir(dest, { recursive: true });
+            console.log(`  - Created directory: ${file}`);
+          }
+        } else {
+          await copyWithDirs(source, dest, true);
+        }
       }
     }
     
