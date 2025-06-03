@@ -134,9 +134,7 @@ export class ModelPanel extends BaseComponent {
             loadingMessage.textContent = 'Loading configuration...';
             this.formElement.appendChild(loadingMessage);
         } else {
-            // Fall back to current behavior
-            console.log('No config, building form directly');
-            this.buildForm(model, this.formElement);
+            console.error('No configuration available for model panel');
         }
         
         console.log(`ModelPanel.updateModel completed, created ${this._bindings.length} bindings`);
@@ -825,55 +823,41 @@ export class ModelPanel extends BaseComponent {
     /**
      * Format a label from a key
      * @param {string} key - The key to format
-     * @returns {string} The formatted label
+     * @returns {string} - The formatted label
      */
     formatLabel(key) {
-        // Convert camelCase to Title Case
-        return key
-            .replace(/([A-Z])/g, ' $1')
-            .replace(/^./, str => str.toUpperCase())
-            .trim();
-    }
-
-    /**
-     * Build a form from a model object
-     * @param {Object} model - The model object to build a form for
-     * @param {HTMLElement} container - The container to append the form to
-     * @param {string} [parentPath=''] - The parent property path
-     */
-    buildForm(model, container, parentPath = '') {
-        // Process each property in the model, filtering out private properties and functions
-        Object.entries(model)
-            .filter(([key, value]) => {
-                // Skip private properties (those starting with _) and functions
-                return !key.startsWith('_') && typeof value !== 'function';
-            })
-            .forEach(([key, value]) => {
-                const type = this.getType(value);
-                // Construct the full property path for this property
-                const propertyPath = parentPath ? `${parentPath}.${key}` : key;
-
-                if (type === 'object' && !Array.isArray(value)) {
-                    // Create a fieldset for nested objects
-                    this.createObjectField(key, value, container, propertyPath);
-                } else if (type === 'array') {
-                    // Create a table for arrays
-                    this.createArrayField(key, value, container, propertyPath);
-                } else {
-                    // Create a form field for primitive values
-                    this.createField(key, value, type, container, propertyPath);
-                }
-            });
+        // Handle null/undefined or non-string inputs
+        if (key === null || key === undefined) {
+            return '';
+        }
         
-        // If no fields were added, show a message
-        if (container.children.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-message';
-            emptyMessage.textContent = 'No properties to display';
-            container.appendChild(emptyMessage);
+        // Convert to string in case it's a number or other type
+        const str = String(key);
+        
+        // Return empty string for empty input
+        if (!str) {
+            return '';
+        }
+        
+        try {
+            // Convert camelCase to Title Case with spaces
+            return str
+                // Insert a space before all uppercase letters
+                .replace(/([A-Z])/g, ' $1')
+                // Replace underscores with spaces
+                .replace(/_/g, ' ')
+                // Capitalize the first letter
+                .replace(/^./, s => s.toUpperCase())
+                // Trim any leading/trailing spaces
+                .trim()
+                // Replace multiple spaces with a single space
+                .replace(/\s+/g, ' ');
+        } catch (error) {
+            console.warn('Error formatting label:', error);
+            return str; // Return original string if formatting fails
         }
     }
-
+    
     /**
      * Create a form field for a primitive value
      * @param {string} key - The property key
@@ -963,37 +947,16 @@ export class ModelPanel extends BaseComponent {
                         element: input,
                         attribute: type === 'boolean' ? 'checked' : 'value',
                         events: {
-                            view: type === 'boolean' ? 'change' : 'input'
+                            view: type === 'boolean' || type === 'number' ? 'change' : 'input'
                         },
                         parser: type === 'number' ? val => parseFloat(val) : val => val
                     });
                 }
             }
         }
-    }    /**
-     * Create a fieldset for a nested object
-     * @param {string} key - The property key
-     * @param {Object} value - The object value
-     * @param {HTMLElement} container - The container to append the fieldset to
-     * @param {string} [propertyPath=''] - The full property path in the model
-     */
-    createObjectField(key, value, container, propertyPath = '') {
-        const fieldset = document.createElement('fieldset');
-        fieldset.className = 'form-object';
-
-        // Create legend
-        const legend = document.createElement('legend');
-        legend.textContent = this.formatLabel(key);
-
-        // Assemble fieldset
-        fieldset.appendChild(legend);
-
-        // Recursively build form for nested object with the property path
-        this.buildForm(value, fieldset, propertyPath);
-
-        // Add to container
-        container.appendChild(fieldset);
     }
+    
+    // createObjectField method removed - not used in the current implementation
 
     /**
      * Create a table for an array of objects

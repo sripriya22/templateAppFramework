@@ -21,11 +21,10 @@ export class Binding {
    * @param {Object} [options.events] - Custom event types
    */
   constructor(options) {
-    if (!options || !options.model || options.path === undefined || !options.element || !options.eventManager) {
+    if (!options || options.path === undefined || !options.element || !options.eventManager) {
       throw new Error('Missing required binding options');
     }
     
-    this.model = options.model;
     this.path = options.path;
     this.element = options.element;
     this.attribute = options.attribute || 'value';
@@ -124,8 +123,8 @@ export class Binding {
         // Set the flag to prevent view change events from triggering model updates
         this._isUpdatingFromModel = true;
         
-        // Update the view with the new model value
-        this._updateViewFromModel();
+        // Update the view with the new model value from the event
+        this._updateViewFromModel(event.value);
       } finally {
         // Always reset the flag, even if an error occurs
         this._isUpdatingFromModel = false;
@@ -137,9 +136,34 @@ export class Binding {
    * Update the view element with the current model value
    * @private
    */
-  _updateViewFromModel() {
-    // Get the current value from the model
-    const value = ModelPathUtils.getValueFromPath(this.model.getRootInstance(), this.path);
+  _updateViewFromModel(valueFromEvent) {
+    // Get the current value - either from the event or from the model
+    let value;
+    
+    if (valueFromEvent !== undefined) {
+      // Use the value provided in the event
+      value = valueFromEvent;
+    } else {
+      // Get the app from the eventManager
+      const app = this.eventManager._owner;
+      if (!app) {
+        console.error('Cannot update view: No app available through eventManager');
+        return;
+      }
+      
+      // Get the model from the app
+      const model = app.getModel();
+      if (!model) {
+        console.error('Cannot update view: No model available from app');
+        return;
+      }
+      
+      // Get the root instance from the model
+      const rootInstance = model.getRootInstance();
+      
+      // Get the value from the path
+      value = ModelPathUtils.getValueFromPath(rootInstance, this.path);
+    }
     
     // Format the value for display
     const formattedValue = this.formatter(value);
@@ -268,7 +292,6 @@ export class Binding {
       // Clear all references
       this._boundHandleViewChange = null;
       this._boundHandleModelChange = null;
-      this.model = null;
       this.element = null;
       this.eventManager = null;
     } catch (error) {

@@ -37,7 +37,6 @@ export class BindingManager {
   /**
    * Create a new binding
    * @param {Object} options - Binding options
-   * @param {Object} options.model - The model object to bind to
    * @param {string} options.path - The path to the model property
    * @param {HTMLElement} options.element - The DOM element to bind to
    * @param {string} [options.attribute='value'] - The element attribute to bind to
@@ -220,7 +219,7 @@ export class BindingManager {
   }
   
   /**
-   * Handle view-to-model property change events
+   * Handle VIEW_TO_MODEL_PROPERTY_CHANGED events
    * @param {Object} eventData - The event data
    * @private
    */
@@ -228,15 +227,15 @@ export class BindingManager {
     // Get the path and value from the event
     const { path, value } = eventData;
     
-    // Find bindings that match the changed path
-    const matchingBindings = this.getBindingsForPath(path);
+    // Get the client model directly from the app
+    const clientModel = this.app.getModel();
     
-    if (matchingBindings.length > 0) {
-      // Get the model from the first matching binding
-      const model = matchingBindings[0].model;
+    if (clientModel) {
+      // Get the root instance from the client model
+      const rootInstance = clientModel.getRootInstance();
       
       // Update the model (could add validation here)
-      ModelPathUtils.setValueAtPath(model.getRootInstance(), path, value);
+      ModelPathUtils.setValueAtPath(rootInstance, path, value);
       
       // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
       this.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
@@ -246,6 +245,8 @@ export class BindingManager {
       });
       
       console.log(`Updated model for path ${path} and dispatched MODEL_TO_VIEW_PROPERTY_CHANGED`);
+    } else {
+      console.error('No client model available to update for path:', path);
     }
   }
   
