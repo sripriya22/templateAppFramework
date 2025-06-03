@@ -51,7 +51,6 @@ export class Binding {
     
     // Initialize the binding
     this._setupBindings();
-    this.refresh(); // Initial update
     
     console.log(`Binding created for ${this.path} with element ${this.element.tagName}#${this.element.id || 'no-id'}, listening for ${this.events.view} events`);
   }
@@ -140,7 +139,7 @@ export class Binding {
    */
   _updateViewFromModel() {
     // Get the current value from the model
-    const value = ModelPathUtils.getValueFromPath(this.model, this.path);
+    const value = ModelPathUtils.getValueFromPath(this.model.getRootInstance(), this.path);
     
     // Format the value for display
     const formattedValue = this.formatter(value);

@@ -621,6 +621,12 @@ export class ModelPanel extends BaseComponent {
         header.textContent = arrayConfig.Label || this.formatLabel(arrayConfig.PropertyPath);
         container.appendChild(header);
         
+        // Create table wrapper with horizontal scrolling
+        const tableWrapper = document.createElement('div');
+        tableWrapper.className = 'array-table-wrapper';
+        tableWrapper.style.overflowX = 'auto'; // Add horizontal scrolling
+        container.appendChild(tableWrapper);
+        
         // Create table
         const table = document.createElement('table');
         table.className = 'array-table';
@@ -669,13 +675,70 @@ export class ModelPanel extends BaseComponent {
                 
                 cell.appendChild(widget);
                 row.appendChild(cell);
+                
+                // Create binding for this widget if it's not disabled
+                if (propConfig.Editable !== false) {
+                    const app = this._view.getApp();
+                    if (app) {
+                        const model = app.getModel();
+                        if (model) {
+                            // Create path to this array item property
+                            const itemPath = `${arrayConfig.PropertyPath}[${index}].${propName}`;
+                            console.log(`Creating binding for array item: ${itemPath}`);
+                            
+                            // Determine the appropriate attribute based on widget type
+                            let attribute = 'value';
+                            if (widget.type === 'checkbox') {
+                                attribute = 'checked';
+                            }
+                            
+                            // Create binding for this widget with appropriate event handling
+                            let parser, formatter, viewEvent;
+                            
+                            if (widget.type === 'checkbox') {
+                                parser = val => Boolean(val);
+                                formatter = val => Boolean(val);
+                            } else if (widget.type === 'number' || typeof value === 'number') {
+                                parser = val => {
+                                    if (val === '') return 0;
+                                    const num = parseFloat(val);
+                                    return isNaN(num) ? 0 : num;
+                                };
+                                formatter = val => (val === undefined || val === null) ? '' : val.toString();
+                                formatter = val => {
+                                    if (val === undefined || val === null) return '';
+                                    return val.toString();
+                                };
+                                
+                                // For numeric inputs, use 'change' event instead of 'input'
+                                // This ensures we only update the model when the user completes their edit
+                                // and not on every keystroke
+                                viewEvent = 'change';
+                            } else {
+                                // Default identity functions for other types
+                                parser = val => val;
+                                formatter = val => val !== undefined && val !== null ? val.toString() : '';
+                            }
+                            
+                            this.createBinding({
+                                model: model,
+                                path: itemPath,
+                                element: widget,
+                                attribute: attribute,
+                                parser: parser,
+                                formatter: formatter,
+                                events: viewEvent ? { view: viewEvent } : undefined
+                            });
+                        }
+                    }
+                }
             });
             
             tbody.appendChild(row);
         });
         
         table.appendChild(tbody);
-        container.appendChild(table);
+        tableWrapper.appendChild(table);
         
         // Add to form container
         this.formElement.appendChild(container);
@@ -1094,7 +1157,7 @@ export class ModelPanel extends BaseComponent {
                     input.style.boxSizing = 'border-box';
                     cell.appendChild(input);
                     
-                    // Create binding for this input
+                    // Create binding for this input with explicit event handling
                     // Get the app and model through the view
                     const app = this._view.getApp();
                     if (app) {
@@ -1104,15 +1167,12 @@ export class ModelPanel extends BaseComponent {
                             const itemPath = `${propertyPath}[${rowIndex}].${key}`;
                             console.log(`Creating binding for array item: ${itemPath}`);
                             
-                            // Create binding for this input
+                            // Create binding for this input, letting Binding._determineViewEvent select the appropriate event
                             this.createBinding({
                                 model: model,
                                 path: itemPath,
                                 element: input,
                                 attribute: 'value',
-                                events: {
-                                    view: 'input' // Use 'input' event for text/number inputs
-                                },
                                 parser: type === 'number' ? val => parseFloat(val) : val => val
                             });
                         }
@@ -1222,15 +1282,12 @@ export class ModelPanel extends BaseComponent {
                         const itemPath = `${propertyPath}[${index}]`;
                         console.log(`Creating binding for array item: ${itemPath}`);
                         
-                        // Create binding for this input
+                        // Create binding for this input, letting Binding._determineViewEvent select the appropriate event
                         this.createBinding({
                             model: model,
                             path: itemPath,
                             element: input,
                             attribute: 'value',
-                            events: {
-                                view: 'input' // Use 'input' event for text/number inputs
-                            },
                             parser: itemType === 'number' ? val => parseFloat(val) : val => val
                         });
                     }

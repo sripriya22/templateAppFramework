@@ -32,7 +32,6 @@ export class BindingManager {
     this.createBinding = this.createBinding.bind(this);
     this.removeBinding = this.removeBinding.bind(this);
     this.removeAllBindings = this.removeAllBindings.bind(this);
-    this.refreshBindings = this.refreshBindings.bind(this);
   }
   
   /**
@@ -155,14 +154,6 @@ export class BindingManager {
   }
   
   /**
-   * Refresh all bindings (update views from model)
-   */
-  refreshBindings() {
-    this.bindings.forEach(binding => binding.refresh());
-    console.log(`Refreshed ${this.bindings.length} bindings`);
-  }
-  
-  /**
    * Get all bindings for a specific element
    * @param {HTMLElement} element - The element to get bindings for
    * @returns {Binding[]} Array of bindings for the element
@@ -186,6 +177,33 @@ export class BindingManager {
       // Match component bindings with empty path (these should be notified of all changes)
       if (binding instanceof ComponentBinding && binding.path === '') {
         return true;
+      }
+      
+      // Handle array paths - match array items when the array itself changes
+      // For example, if path is 'items', match 'items[0].name', 'items[1].age', etc.
+      if (path && binding.path && binding.path.startsWith(path + '[')) {
+        return true;
+      }
+      
+      // Handle array item changes - match specific array items
+      // For example, if path is 'items[0].name', match that specific binding
+      if (path && binding.path) {
+        // Extract the array path and index from the changed path
+        const arrayMatch = path.match(/^(.+?)\[(\d+)\](.*)$/);
+        if (arrayMatch) {
+          const [, arrayPath, index, remainder] = arrayMatch;
+          // Check if the binding path matches this array path pattern
+          const bindingArrayMatch = binding.path.match(/^(.+?)\[(\d+)\](.*)$/);
+          if (bindingArrayMatch) {
+            const [, bindingArrayPath, bindingIndex, bindingRemainder] = bindingArrayMatch;
+            // If array paths match and indices match, and the remainder matches or is a prefix
+            if (arrayPath === bindingArrayPath && index === bindingIndex && 
+                (remainder === bindingRemainder || 
+                 (remainder && bindingRemainder && bindingRemainder.startsWith(remainder)))) {
+              return true;
+            }
+          }
+        }
       }
       
       return false;
@@ -218,7 +236,7 @@ export class BindingManager {
       const model = matchingBindings[0].model;
       
       // Update the model (could add validation here)
-      ModelPathUtils.setValueAtPath(model, path, value);
+      ModelPathUtils.setValueAtPath(model.getRootInstance(), path, value);
       
       // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
       this.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {

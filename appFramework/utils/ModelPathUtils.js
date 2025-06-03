@@ -72,12 +72,19 @@ export class ModelPathUtils {
    * @returns {*} The value at the path, or undefined if not found
    */
   static getValueFromPath(obj, path) {
-    const parts = path.split('.');
+    if (!obj || !path) return undefined;
+    
+    // Handle array notation like Parameters[0].Value
+    // Convert to dot notation: Parameters.0.Value
+    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+    const parts = normalizedPath.split('.');
+    
     let current = obj;
     for (const part of parts) {
       if (current === null || current === undefined) {
         return undefined;
       }
+      
       if (/^\d+$/.test(part)) {
         const index = parseInt(part, 10);
         if (Array.isArray(current) && index < current.length) {
@@ -106,7 +113,11 @@ export class ModelPathUtils {
   static setValueAtPath(obj, path, value) {
     if (!obj || !path) return false;
     
-    const parts = path.split('.');
+    // Handle array notation like Parameters[0].Value
+    // Convert to dot notation: Parameters.0.Value
+    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
+    
+    const parts = normalizedPath.split('.');
     const lastPart = parts.pop();
     let current = obj;
     
@@ -134,8 +145,17 @@ export class ModelPathUtils {
     
     // Set the value on the parent object
     if (current !== null && current !== undefined) {
-      current[lastPart] = value;
-      return true;
+      // Handle numeric array index in the last part
+      if (/^\d+$/.test(lastPart)) {
+        const index = parseInt(lastPart, 10);
+        if (Array.isArray(current) && index < current.length) {
+          current[index] = value;
+          return true;
+        }
+      } else {
+        current[lastPart] = value;
+        return true;
+      }
     }
     
     return false;
