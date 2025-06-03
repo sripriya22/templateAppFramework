@@ -7,24 +7,29 @@ export class JSONViewer extends BaseComponent {
     /**
      * Create a new JSONViewer instance
      * @param {Object} view - The parent view instance
+     * @param {Object} [config] - Optional component configuration
      */
-    constructor(view) {
-        super(view);
-        this.createJSONViewer();
+    constructor(view, config = null) {
+        super(view, config);
+        
+        // Create the component element
+        this.element = document.createElement('div');
+        this.element.className = 'model-panel';
+        this.element.style.overflow = 'hidden';
+        this.element.style.boxSizing = 'border-box';
         
         // Store component reference on element for layout access
         this.element.__component = this;
+        
+        // Now create the rest of the viewer
+        this.createJSONViewer();
     }
 
     /**
      * Create the JSON viewer DOM structure
      */
     createJSONViewer() {
-        // Create main container with same styling as ModelPanel
-        this.element = document.createElement('div');
-        this.element.className = 'model-panel';
-        this.element.style.overflow = 'hidden';
-        this.element.style.boxSizing = 'border-box';
+        // Main container is already created in the constructor
 
         // Create header with same styling as ModelPanel
         const header = document.createElement('div');
@@ -39,15 +44,18 @@ export class JSONViewer extends BaseComponent {
         contentWrapper.style.boxSizing = 'border-box';
         contentWrapper.style.maxHeight = '100%'; // Ensure it doesn't overflow parent
         
-        this.contentElement = document.createElement('pre');
-        this.contentElement.className = 'json-content';
+        // Create content element for JSON display if not already created
+        if (!this.contentElement) {
+            this.contentElement = document.createElement('pre');
+            this.contentElement.className = 'json-content';
+        }
         this.contentElement.style.margin = '0';
         this.contentElement.style.whiteSpace = 'pre-wrap';
         this.contentElement.style.wordBreak = 'break-word';
         this.contentElement.style.fontFamily = 'monospace';
         this.contentElement.style.fontSize = '13px';
         this.contentElement.style.lineHeight = '1.5';
-
+        
         // Assemble the component
         contentWrapper.appendChild(this.contentElement);
         this.element.appendChild(header);
@@ -73,6 +81,29 @@ export class JSONViewer extends BaseComponent {
             
             // Apply syntax highlighting
             this.contentElement.innerHTML = this.highlightJson(formattedJson);
+            
+            // Remove any existing bindings first
+            this.removeBindings();
+            
+            // Get the app through the view
+            const app = this._view.getApp();
+            if (!app) {
+                console.error('Cannot create component binding: app not available');
+                return;
+            }
+            
+            // Ensure we have a valid element before creating the binding
+            if (!this.element) {
+                console.error('Cannot create component binding: element not available');
+                return;
+            }
+            
+            // Create a component binding to update the view when any model property changes
+            // This follows the binding architecture without storing model references in the component
+            this.createComponentBinding((currentModel) => {
+                console.log('JSONViewer: Model property changed, updating entire view');
+                this.updateModel(currentModel);
+            });
         } catch (error) {
             this.contentElement.innerHTML = `<span class="json-error">Error formatting JSON: ${error.message}</span>`;
             console.error('Error formatting JSON:', error);

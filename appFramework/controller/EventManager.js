@@ -20,6 +20,8 @@ class EventManager {
    * @returns {Function} A function to unregister this listener
    */
   addEventListener(eventType, listener) {
+    console.log(`Adding event listener for: ${eventType}`);
+    
     if (typeof eventType !== 'string' || !eventType) {
       throw new Error('Event type must be a non-empty string');
     }
@@ -112,6 +114,8 @@ class EventManager {
    * @throws {Error} If the event type is invalid or the event data doesn't match the schema
    */
   dispatchEvent(eventType, data = {}) {
+    console.log(`Dispatching event: ${eventType}`, data);
+    
     if (!eventType) {
       const error = new Error('Cannot dispatch event: eventType is required');
       console.error(error);

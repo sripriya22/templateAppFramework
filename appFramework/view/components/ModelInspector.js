@@ -11,19 +11,23 @@ export class ModelInspector extends BaseComponent {
      */
     constructor(view) {
         super(view);
-        this.createModelInspector();
+        
+        // Create main container element first
+        this.element = document.createElement('div');
+        this.element.className = 'model-inspector';
         
         // Store component reference on element for layout access
         this.element.__component = this;
+        
+        // Now create the rest of the inspector
+        this.createModelInspector();
     }
 
     /**
      * Create the model inspector DOM structure
      */
     createModelInspector() {
-        // Create main container
-        this.element = document.createElement('div');
-        this.element.className = 'model-inspector';
+        // Main container is already created in the constructor
 
         // Create header
         const header = document.createElement('div');
@@ -87,6 +91,38 @@ export class ModelInspector extends BaseComponent {
         this.treeTable.setData(model, this.customNodeRenderer.bind(this));
         
         // Root node will be expanded automatically by TreeTable with expandRoot: true
+        
+        // Remove any existing bindings first
+        this.removeBindings();
+        
+        // Get the app and model through the view
+        const app = this._view.getApp();
+        if (!app) {
+            console.error('Cannot create component binding: app not available');
+            return;
+        }
+        // Ensure we have a valid element before creating the binding
+        if (!this.element) {
+            console.error('Cannot create component binding: element not available');
+            return;
+        }
+        
+        // Create a component binding to update specific tree nodes when model properties change
+        // This follows the binding architecture without storing model references in the component
+        this.createComponentBinding((currentModel, changedPath) => {
+            console.log(`ModelInspector: Model property changed: ${changedPath}`);
+            
+            // Find the node in the tree table that corresponds to the changed path
+            const node = this.treeTable.findNodeByPath(changedPath);
+            
+            if (node) {
+                // If we found the node, just update that specific node
+                this._updateNodeInTreeTable(node, currentModel, changedPath);
+            } else {
+                // If we couldn't find the node (might be a new property), refresh the entire tree
+                this.treeTable.setData(currentModel, this.customNodeRenderer.bind(this));
+            }
+        });
     }
 
     /**
@@ -145,6 +181,76 @@ export class ModelInspector extends BaseComponent {
         row.appendChild(valueCell);
     }
 
+    /**
+     * Update a specific node in the tree table
+     * @param {Object} node - The tree table node
+     * @param {Object} model - The current model
+     * @param {string} path - The path to the changed property
+     * @private
+     */
+    _updateNodeInTreeTable(node, model, path) {
+        if (!node || !node.row) {
+            console.warn(`Node not found or invalid for path: ${path}`);
+            return;
+        }
+        
+        try {
+            // Get the updated value from the model using the path
+            let value = model;
+            const pathParts = path.split('.');
+            
+            for (const part of pathParts) {
+                if (part.includes('[') && part.includes(']')) {
+                    // Handle array index notation [index]
+                    const arrayName = part.split('[')[0];
+                    const indexMatch = part.match(/\[(\d+)\]/);
+                    if (indexMatch && indexMatch[1]) {
+                        const index = parseInt(indexMatch[1], 10);
+                        value = arrayName ? value[arrayName][index] : value[index];
+                    }
+                } else {
+                    value = value[part];
+                }
+                
+                if (value === undefined) break;
+            }
+            
+            // Get the type of the value
+            let type = 'undefined';
+            if (value === null) {
+                type = 'null';
+            } else if (Array.isArray(value)) {
+                type = 'array';
+            } else if (value instanceof Date) {
+                type = 'date';
+            } else {
+                type = typeof value;
+            }
+            
+            // Update the type cell
+            const typeCell = node.row.querySelector('.type-cell');
+            if (typeCell) {
+                typeCell.textContent = type;
+            }
+            
+            // Update the value cell
+            const valueCell = node.row.querySelector('.value-cell');
+            if (valueCell) {
+                if (type === 'object') {
+                    valueCell.textContent = '{...}';
+                } else if (type === 'array') {
+                    valueCell.textContent = `[${value.length}]`;
+                } else {
+                    valueCell.textContent = this.formatValue(value, type);
+                    valueCell.className = `value-cell type-${type}`;
+                }
+                console.log(`Updated value cell for path ${path} with value:`, value);
+            }
+        } catch (error) {
+            console.error(`Error updating node for path ${path}:`, error);
+        }
+    }
+    
     /**
      * Format a value for display
      * @param {*} value - The value to format

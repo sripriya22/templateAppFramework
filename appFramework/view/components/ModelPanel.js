@@ -108,26 +108,126 @@ export class ModelPanel extends BaseComponent {
      * @param {Object} model - The model data to display
      */
     updateModel(model) {
+        console.log('ModelPanel.updateModel called with model:', model ? model._className : 'null');
+        
+        // Clear existing bindings before rebuilding the form
+        this.removeBindings();
+        console.log('Cleared existing bindings');
+        
         // Clear existing content
         this.formElement.innerHTML = '';
         
         if (!model) {
-            console.warn('No model data provided to ModelPanel');
+            console.warn('ModelPanel.updateModel called with null model');
             return;
         }
         
         // If we have a configuration and it's loaded, use it
         if (this._config && this._configLoaded) {
+            console.log('Building form from config');
             this._buildFormFromConfig(model);
         } else if (this._config && !this._configLoaded) {
             // If config is being loaded, show a loading message
+            console.log('Config is loading, showing loading message');
             const loadingMessage = document.createElement('div');
             loadingMessage.className = 'loading-message';
             loadingMessage.textContent = 'Loading configuration...';
             this.formElement.appendChild(loadingMessage);
         } else {
             // Fall back to current behavior
+            console.log('No config, building form directly');
             this.buildForm(model, this.formElement);
+        }
+        
+        console.log(`ModelPanel.updateModel completed, created ${this._bindings.length} bindings`);
+    }
+    
+    /**
+     * Validate the configuration against the model definitions
+     * @param {string} modelClass - The model class name
+     * @private
+     */
+    _validateConfig(modelClass) {
+        if (!this._config) {
+            throw new Error('No configuration provided to ModelPanel');
+        }
+        
+        if (!modelClass) {
+            throw new Error('Model class name is required for validation');
+        }
+        
+        const app = this._view.getApp();
+        if (!app) {
+            throw new Error('App not available');
+        }
+        
+        const clientModel = app.getModel();
+        if (!clientModel) {
+            throw new Error('Client model not available');
+        }
+        
+        const modelManager = clientModel.modelManager;
+        if (!modelManager) {
+            throw new Error('Model manager not available');
+        }
+        
+        // Validate property groups
+        if (this._config.PropertyGroups) {
+            this._config.PropertyGroups.forEach(group => {
+                if (!group.Properties || !Array.isArray(group.Properties)) {
+                    throw new Error(`Property group '${group.GroupName}' has no properties array`);
+                }
+                
+                group.Properties.forEach(prop => {
+                    if (!prop.PropertyPath) {
+                        throw new Error(`Property in group '${group.GroupName}' is missing PropertyPath`);
+                    }
+                    
+                    // Check if property exists in model definition
+                    const propInfo = this._getPropertyDefinition(modelClass, prop.PropertyPath);
+                    if (!propInfo) {
+                        throw new Error(`Property '${prop.PropertyPath}' not found in model class '${modelClass}'`);
+                    }
+                });
+            });
+        }
+        
+        // Validate array configs
+        if (this._config.ArrayConfigs) {
+            this._config.ArrayConfigs.forEach(arrayConfig => {
+                if (!arrayConfig.PropertyPath) {
+                    throw new Error('Array config is missing PropertyPath');
+                }
+                
+                // Check if array property exists in model definition
+                const arrayPropInfo = this._getPropertyDefinition(modelClass, arrayConfig.PropertyPath);
+                if (!arrayPropInfo) {
+                    throw new Error(`Array property '${arrayConfig.PropertyPath}' not found in model class '${modelClass}'`);
+                }
+                
+                // Ensure it's actually an array
+                if (!arrayPropInfo.IsArray) {
+                    throw new Error(`Property '${arrayConfig.PropertyPath}' in model class '${modelClass}' is not an array`);
+                }
+                
+                // Get the type of array elements
+                const elementType = arrayPropInfo.Type;
+                
+                // Validate display properties against the element type
+                if (arrayConfig.DisplayProperties && Array.isArray(arrayConfig.DisplayProperties)) {
+                    arrayConfig.DisplayProperties.forEach(prop => {
+                        if (!prop.PropertyPath) {
+                            throw new Error(`Display property in array config '${arrayConfig.PropertyPath}' is missing PropertyPath`);
+                        }
+                        
+                        // Check if property exists in element type definition
+                        const propInfo = this._getPropertyDefinition(elementType, prop.PropertyPath);
+                        if (!propInfo) {
+                            throw new Error(`Property '${prop.PropertyPath}' not found in element type '${elementType}' for array '${arrayConfig.PropertyPath}'`);
+                        }
+                    });
+                }
+            });
         }
     }
     
@@ -137,8 +237,15 @@ export class ModelPanel extends BaseComponent {
      * @private
      */
     _buildFormFromConfig(model) {
-        // Get the model class definition manager through the public API
-        const modelManager = this._view._app.model.modelManager;
+        // Validate the configuration against the model definitions
+        if (this._config.ModelClass) {
+            try {
+                this._validateConfig(this._config.ModelClass);
+            } catch (error) {
+                console.error('ModelPanel configuration validation failed:', error.message);
+                throw error; // Re-throw to expose the implementation bug
+            }
+        }
         
         // Check if the model class matches the config
         if (this._config.ModelClass && model._className !== this._config.ModelClass) {
@@ -227,11 +334,27 @@ export class ModelPanel extends BaseComponent {
         label.textContent = propConfig.label || this.formatLabel(propPath.split('.').pop());
         formGroup.appendChild(label);
         
-        // Create an input field based on the property type and widget type
+        // Create an input field based on the property type, widget type, and editability
         let input;
         const widgetType = propConfig.widget || this._getDefaultWidgetType(value);
+        const isEditable = propConfig.Editable !== false;
         
-        switch (widgetType) {
+        // For non-editable fields (except checkboxes), create a span instead of an input
+        if (!isEditable && widgetType !== 'checkbox') {
+            input = document.createElement('span');
+            input.className = 'non-editable-field';
+            input.textContent = value !== undefined && value !== null ? value : '';
+            
+            // We still create a binding for non-editable fields to update the display
+            this.createBinding({
+                model: model,
+                path: propPath,
+                element: input,
+                attribute: 'textContent'
+            });
+        } else {
+            // For editable fields or checkboxes, create the appropriate input
+            switch (widgetType) {
             case 'checkbox':
                 input = document.createElement('input');
                 input.type = 'checkbox';
@@ -323,6 +446,7 @@ export class ModelPanel extends BaseComponent {
                     element: input
                 });
                 break;
+            }
         }
         
         // Add placeholder if specified
@@ -652,8 +776,9 @@ export class ModelPanel extends BaseComponent {
      * Build a form from a model object
      * @param {Object} model - The model object to build a form for
      * @param {HTMLElement} container - The container to append the form to
+     * @param {string} [parentPath=''] - The parent property path
      */
-    buildForm(model, container) {
+    buildForm(model, container, parentPath = '') {
         // Process each property in the model, filtering out private properties and functions
         Object.entries(model)
             .filter(([key, value]) => {
@@ -662,16 +787,18 @@ export class ModelPanel extends BaseComponent {
             })
             .forEach(([key, value]) => {
                 const type = this.getType(value);
+                // Construct the full property path for this property
+                const propertyPath = parentPath ? `${parentPath}.${key}` : key;
 
                 if (type === 'object' && !Array.isArray(value)) {
                     // Create a fieldset for nested objects
-                    this.createObjectField(key, value, container);
+                    this.createObjectField(key, value, container, propertyPath);
                 } else if (type === 'array') {
                     // Create a table for arrays
-                    this.createArrayField(key, value, container);
+                    this.createArrayField(key, value, container, propertyPath);
                 } else {
                     // Create a form field for primitive values
-                    this.createField(key, value, type, container);
+                    this.createField(key, value, type, container, propertyPath);
                 }
             });
         
@@ -690,8 +817,9 @@ export class ModelPanel extends BaseComponent {
      * @param {*} value - The property value
      * @param {string} type - The value type
      * @param {HTMLElement} container - The container to append the field to
+     * @param {string} [propertyPath=''] - The full property path in the model
      */
-    createField(key, value, type, container) {
+    createField(key, value, type, container, propertyPath = '') {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
 
@@ -755,85 +883,38 @@ export class ModelPanel extends BaseComponent {
         
         // Add to container
         container.appendChild(formGroup);
-    }
-
-    /**
-     * Create a fieldset for a nested object
-     * @param {string} key - The property key
-     * @param {Object} value - The object value
-     * @param {HTMLElement} container - The container to append the fieldset to
-     */
-    createObjectField(key, value, container) {
-        const fieldset = document.createElement('fieldset');
-        fieldset.className = 'form-object';
-
-        // Create legend
-        const legend = document.createElement('legend');
-        legend.textContent = this.formatLabel(key);
-
-        // Assemble fieldset
-        fieldset.appendChild(legend);
-
-        // Recursively build form for nested object
-        this.buildForm(value, fieldset);
-
-        // Add to container
-        container.appendChild(fieldset);
-    }
-
-    /**
-     * Create a table for an array of objects
-     * @param {string} key - The property key
-     * @param {Array} array - The array value
-     * @param {HTMLElement} container - The container to append the table to
-     */
-    createArrayField(key, array, container) {
-        const formGroup = document.createElement('div');
-        formGroup.className = 'form-group';
-
-        // Create label
-        const label = document.createElement('label');
-        label.textContent = this.formatLabel(key);
-
-        // Create array container
-        const arrayContainer = document.createElement('div');
-        arrayContainer.className = 'array-container';
-
-        // Check if array is empty
-        if (array.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-array';
-            emptyMessage.textContent = 'No items';
-            arrayContainer.appendChild(emptyMessage);
-        } else {
-            // Check if array contains objects
-            const firstItem = array[0];
-            const isObjectArray = typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem);
-
-            if (isObjectArray) {
-                // Create a table for array of objects
-                this.createArrayTable(array, arrayContainer);
-            } else {
-                // Create a simple list for array of primitives
-                this.createArrayList(array, arrayContainer);
+        
+        // Create binding for this field if we have a property path
+        if (propertyPath) {
+            // Get the app and model through the view
+            const app = this._view.getApp();
+            if (app) {
+                const model = app.getModel();
+                if (model) {
+                    console.log(`Creating binding for field: ${propertyPath}`);
+                    
+                    // Create binding for this input
+                    this.createBinding({
+                        model: model,
+                        path: propertyPath,
+                        element: input,
+                        attribute: type === 'boolean' ? 'checked' : 'value',
+                        events: {
+                            view: type === 'boolean' ? 'change' : 'input'
+                        },
+                        parser: type === 'number' ? val => parseFloat(val) : val => val
+                    });
+                }
             }
         }
-
-        // Assemble form group
-        formGroup.appendChild(label);
-        formGroup.appendChild(arrayContainer);
-
-        // Add to container
-        container.appendChild(formGroup);
-    }
-
-    /**
+    }    /**
      * Create a fieldset for a nested object
      * @param {string} key - The property key
      * @param {Object} value - The object value
      * @param {HTMLElement} container - The container to append the fieldset to
+     * @param {string} [propertyPath=''] - The full property path in the model
      */
-    createObjectField(key, value, container) {
+    createObjectField(key, value, container, propertyPath = '') {
         const fieldset = document.createElement('fieldset');
         fieldset.className = 'form-object';
 
@@ -844,8 +925,8 @@ export class ModelPanel extends BaseComponent {
         // Assemble fieldset
         fieldset.appendChild(legend);
 
-        // Recursively build form for nested object
-        this.buildForm(value, fieldset);
+        // Recursively build form for nested object with the property path
+        this.buildForm(value, fieldset, propertyPath);
 
         // Add to container
         container.appendChild(fieldset);
@@ -856,8 +937,9 @@ export class ModelPanel extends BaseComponent {
      * @param {string} key - The property key
      * @param {Array} array - The array value
      * @param {HTMLElement} container - The container to append the table to
+     * @param {string} [propertyPath=''] - The full property path in the model
      */
-    createArrayField(key, array, container) {
+    createArrayField(key, array, container, propertyPath = '') {
         const formGroup = document.createElement('div');
         formGroup.className = 'form-group';
 
@@ -880,12 +962,15 @@ export class ModelPanel extends BaseComponent {
             const firstItem = array[0];
             const isObjectArray = typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem);
 
+            // Construct the full property path for this array
+            const fullPropertyPath = propertyPath;
+            
             if (isObjectArray) {
                 // Create a table for array of objects
-                this.createArrayTable(array, arrayContainer);
+                this.createArrayTable(array, arrayContainer, fullPropertyPath);
             } else {
                 // Create a simple list for array of primitives
-                this.createArrayList(array, arrayContainer);
+                this.createArrayList(array, arrayContainer, fullPropertyPath);
             }
         }
 
@@ -901,8 +986,9 @@ export class ModelPanel extends BaseComponent {
      * Create a table for an array of objects
      * @param {Array} array - The array of objects
      * @param {HTMLElement} container - The container to append the table to
+     * @param {string} propertyPath - The path to the array property in the model
      */
-    createArrayTable(array, container) {
+    createArrayTable(array, container, propertyPath) {
         if (array.length === 0) {
             const emptyMessage = document.createElement('div');
             emptyMessage.className = 'empty-array';
@@ -952,7 +1038,7 @@ export class ModelPanel extends BaseComponent {
         // Create body
         const tbody = document.createElement('tbody');
 
-        array.forEach((item) => {
+        array.forEach((item, rowIndex) => {
             const row = document.createElement('tr');
 
             keys.forEach(key => {
@@ -976,6 +1062,29 @@ export class ModelPanel extends BaseComponent {
                     checkbox.style.display = 'block';
                     cell.style.textAlign = 'center';
                     cell.appendChild(checkbox);
+                    
+                    // Create binding for this checkbox
+                    // Get the app and model through the view
+                    const app = this._view.getApp();
+                    if (app) {
+                        const model = app.getModel();
+                        if (model) {
+                            // Create path to this array item property
+                            const itemPath = `${propertyPath}[${rowIndex}].${key}`;
+                            console.log(`Creating binding for array item: ${itemPath}`);
+                            
+                            // Create binding for this checkbox
+                            this.createBinding({
+                                model: model,
+                                path: itemPath,
+                                element: checkbox,
+                                attribute: 'checked',
+                                events: {
+                                    view: 'change' // Use 'change' event for checkboxes
+                                }
+                            });
+                        }
+                    }
                 } else {
                     const input = document.createElement('input');
                     input.type = type === 'number' ? 'number' : 'text';
@@ -984,6 +1093,30 @@ export class ModelPanel extends BaseComponent {
                     input.style.width = '100%';
                     input.style.boxSizing = 'border-box';
                     cell.appendChild(input);
+                    
+                    // Create binding for this input
+                    // Get the app and model through the view
+                    const app = this._view.getApp();
+                    if (app) {
+                        const model = app.getModel();
+                        if (model) {
+                            // Create path to this array item property
+                            const itemPath = `${propertyPath}[${rowIndex}].${key}`;
+                            console.log(`Creating binding for array item: ${itemPath}`);
+                            
+                            // Create binding for this input
+                            this.createBinding({
+                                model: model,
+                                path: itemPath,
+                                element: input,
+                                attribute: 'value',
+                                events: {
+                                    view: 'input' // Use 'input' event for text/number inputs
+                                },
+                                parser: type === 'number' ? val => parseFloat(val) : val => val
+                            });
+                        }
+                    }
                 }
 
                 row.appendChild(cell);
@@ -1001,45 +1134,117 @@ export class ModelPanel extends BaseComponent {
      * Create a list for an array of primitive values
      * @param {Array} array - The array of primitive values
      * @param {HTMLElement} container - The container to append the list to
+     * @param {string} propertyPath - The path to the array property in the model
      */
-    createArrayList(array, container) {
-        const list = document.createElement('ul');
+    createArrayList(array, container, propertyPath) {
+        if (array.length === 0) {
+            const emptyMessage = document.createElement('div');
+            emptyMessage.className = 'empty-array';
+            emptyMessage.textContent = 'No items';
+            container.appendChild(emptyMessage);
+            return;
+        }
+
+        // Create list container
+        const listContainer = document.createElement('div');
+        listContainer.className = 'array-list-container';
+
+        // Create list
+        const list = document.createElement('div');
         list.className = 'array-list';
-        list.style.listStyle = 'none';
-        list.style.padding = '0';
-        list.style.margin = '0';
 
+        // Determine the type of the first non-null item
+        let itemType = 'string';
+        for (const item of array) {
+            if (item !== null && item !== undefined) {
+                itemType = this.getType(item);
+                break;
+            }
+        }
+
+        // Create list items
         array.forEach((item, index) => {
-            const listItem = document.createElement('li');
-            listItem.className = 'array-item';
-            listItem.style.marginBottom = '8px';
-            listItem.style.display = 'flex';
-            listItem.style.alignItems = 'center';
+            const listItem = document.createElement('div');
+            listItem.className = 'array-list-item';
 
-            const indexSpan = document.createElement('span');
-            indexSpan.textContent = `[${index}]: `;
-            indexSpan.style.marginRight = '8px';
-            indexSpan.style.minWidth = '40px';
-            indexSpan.style.flexShrink = '0';
+            // Create index label
+            const indexLabel = document.createElement('div');
+            indexLabel.className = 'array-index';
+            indexLabel.textContent = `[${index}]`;
 
-            const type = this.getType(item);
-            if (type === 'object' || type === 'array') {
-                listItem.textContent = `[${index}]: [${type}]`;
+            // Create value container
+            const valueContainer = document.createElement('div');
+            valueContainer.className = 'array-value';
+
+            if (itemType === 'boolean') {
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = Boolean(item);
+                checkbox.className = 'form-control';
+                valueContainer.appendChild(checkbox);
+                
+                // Create binding for this checkbox
+                // Get the app and model through the view
+                const app = this._view.getApp();
+                if (app) {
+                    const model = app.getModel();
+                    if (model) {
+                        // Create path to this array item
+                        const itemPath = `${propertyPath}[${index}]`;
+                        console.log(`Creating binding for array item: ${itemPath}`);
+                        
+                        // Create binding for this checkbox
+                        this.createBinding({
+                            model: model,
+                            path: itemPath,
+                            element: checkbox,
+                            attribute: 'checked',
+                            events: {
+                                view: 'change' // Use 'change' event for checkboxes
+                            }
+                        });
+                    }
+                }
             } else {
                 const input = document.createElement('input');
-                input.type = type === 'number' ? 'number' : 'text';
-                input.value = String(item);
+                input.type = itemType === 'number' ? 'number' : 'text';
+                input.value = item !== undefined ? String(item) : '';
                 input.className = 'form-control';
-                input.style.flexGrow = '1';
+                valueContainer.appendChild(input);
                 
-                listItem.appendChild(indexSpan);
-                listItem.appendChild(input);
+                // Create binding for this input
+                // Get the app and model through the view
+                const app = this._view.getApp();
+                if (app) {
+                    const model = app.getModel();
+                    if (model) {
+                        // Create path to this array item
+                        const itemPath = `${propertyPath}[${index}]`;
+                        console.log(`Creating binding for array item: ${itemPath}`);
+                        
+                        // Create binding for this input
+                        this.createBinding({
+                            model: model,
+                            path: itemPath,
+                            element: input,
+                            attribute: 'value',
+                            events: {
+                                view: 'input' // Use 'input' event for text/number inputs
+                            },
+                            parser: itemType === 'number' ? val => parseFloat(val) : val => val
+                        });
+                    }
+                }
             }
 
+            // Assemble list item
+            listItem.appendChild(indexLabel);
+            listItem.appendChild(valueContainer);
             list.appendChild(listItem);
         });
 
-        container.appendChild(list);
+        listContainer.appendChild(list);
+        container.appendChild(listContainer);
     }
 
     /**
@@ -1078,36 +1283,6 @@ export class ModelPanel extends BaseComponent {
             console.warn('Error formatting label:', error);
             return str; // Return original string if formatting fails
         }
-    }
-    
-    /**
-     * Dispatch a model update event
-     * @param {Object} model - The model object to update
-     * @param {string} [propertyPath] - Optional property path that was updated
-     * @private
-     */
-    _dispatchModelUpdate(model, propertyPath) {
-        if (!this._view || !this._view.app || !this._view.app.eventManager) {
-            console.warn('Cannot dispatch model update: app or event manager not available');
-            return;
-        }
-        
-        // If we have a specific property path, dispatch a property change event
-        if (propertyPath) {
-            const value = ModelPathUtils.getValueFromPath(model, propertyPath);
-            
-            this._view.app.eventManager.dispatchEvent(EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, {
-                path: propertyPath,
-                value: value,
-                model: model,
-                source: 'component'
-            });
-        }
-        
-        // Always dispatch the general model update event
-        this._view.app.eventManager.dispatch(EventTypes.CLIENT_MODEL_UPDATED, {
-            Data: model
-        });
     }
 
     /**

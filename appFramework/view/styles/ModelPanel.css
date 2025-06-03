@@ -50,6 +50,70 @@
     -ms-overflow-style: -ms-autohiding-scrollbar; /* IE and Edge */
 }
 
+/* Non-editable field styling */
+.non-editable-field {
+    font-weight: bold;
+    padding: 6px 0;
+    display: inline-block;
+    border: none;
+    background: transparent;
+    color: #333;
+}
+
+/* Property group styling */
+.property-group {
+    margin-bottom: 20px;
+    border: 1px solid #eaeaea;
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.property-group-title {
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #444;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+/* Array section styling */
+.array-section {
+    margin-bottom: 20px;
+}
+
+.array-section-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #444;
+}
+
+/* Table styling */
+.model-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+}
+
+.model-table th {
+    text-align: left;
+    padding: 8px;
+    background-color: #f5f5f5;
+    border-bottom: 2px solid #ddd;
+    font-weight: 600;
+}
+
+.model-table td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+}
+
+/* Ensure the Use column checkbox is centered */
+.model-table td input[type="checkbox"] {
+    margin: 0 auto;
+    display: block;
+}
+
 .model-form::-webkit-scrollbar {
     display: none; /* Chrome, Safari, Opera */
 }

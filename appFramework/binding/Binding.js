@@ -9,73 +9,75 @@ import { EventTypes } from '../controller/EventTypes.js';
  */
 export class Binding {
   /**
-   * Create a new Binding instance
-   * @param {Object} options - Binding options
-   * @param {Object} options.model - The model object to bind to
-   * @param {string} options.path - The path to the model property (e.g., 'user.name')
+   * Create a new binding
+   * @param {Object} options - The binding options
+   * @param {Object} options.model - The model object
+   * @param {string} options.path - The property path in the model
    * @param {HTMLElement} options.element - The DOM element to bind to
-   * @param {string} [options.attribute='value'] - The element attribute to bind to (e.g., 'value', 'textContent')
-   * @param {Function} [options.formatter] - Optional formatter function to transform model value for display
-   * @param {Function} [options.parser] - Optional parser function to transform input value before updating model
+   * @param {string} [options.attribute='value'] - The attribute to bind to
+   * @param {Function} [options.parser=identity] - Function to parse value from string
+   * @param {Function} [options.formatter=identity] - Function to format value to string
    * @param {Object} options.eventManager - The event manager instance
-   * @param {Object} [options.events] - Custom events configuration
-   * @param {string} [options.events.view='input'] - Event to listen for on the view element
-   * @param {string|Array<string>} [options.events.model=[EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED]] - Event(s) to listen for on the model
+   * @param {Object} [options.events] - Custom event types
    */
   constructor(options) {
-    // Required options
+    if (!options || !options.model || options.path === undefined || !options.element || !options.eventManager) {
+      throw new Error('Missing required binding options');
+    }
+    
     this.model = options.model;
     this.path = options.path;
     this.element = options.element;
+    this.attribute = options.attribute || 'value';
+    this.parser = options.parser || (value => value);
+    this.formatter = options.formatter || (value => value);
     this.eventManager = options.eventManager;
     
-    // Optional options with defaults
-    this.attribute = options.attribute || 'value';
-    this.formatter = options.formatter || (value => value);
-    this.parser = options.parser || (value => value);
+    // Flag to prevent infinite update loops
+    // This is set to true when updating the view from a model change
+    // and prevents view change events from triggering model updates
+    this._isUpdatingFromModel = false;
     
-    // Event configuration
+    // Determine the appropriate events to listen for
     this.events = {
-      // DOM events to listen for on the element (e.g., 'input', 'change')
-      // When these DOM events occur, we'll dispatch a VIEW_TO_MODEL_PROPERTY_CHANGED event
-      view: (options.events && options.events.view) || 'input',
-      
-      // Custom events to listen for from the model
-      // These are typically MODEL_TO_VIEW_PROPERTY_CHANGED events
-      model: (options.events && options.events.model) || [EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED]
+      view: options.events?.view || this._determineViewEvent(options),
+      model: options.events?.model || [EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED]
     };
     
-    // Convert model events to array if it's a string
-    if (typeof this.events.model === 'string') {
+    // Ensure model events are always in array format
+    if (!Array.isArray(this.events.model)) {
       this.events.model = [this.events.model];
     }
     
-    // Bind event handlers to this instance
-    this._handleViewChange = this._handleViewChange.bind(this);
-    this._handleModelChange = this._handleModelChange.bind(this);
-    
     // Initialize the binding
     this._setupBindings();
-    this._updateViewFromModel(); // Initial update
+    this.refresh(); // Initial update
+    
+    console.log(`Binding created for ${this.path} with element ${this.element.tagName}#${this.element.id || 'no-id'}, listening for ${this.events.view} events`);
   }
   
   /**
-   * Set up the event listeners for the binding
+   * Set up event listeners for view and model events
    * @private
    */
   _setupBindings() {
-    // Listen for changes on the view element
-    this.element.addEventListener(this.events.view, this._handleViewChange);
+    console.log(`Setting up binding for ${this.path} with view event: ${this.events.view}`);
+    console.log(`Element: ${this.element.tagName}, type: ${this.element.type || 'n/a'}, id: ${this.element.id || 'no-id'}`);
     
-    // Listen for changes on the model
-    if (Array.isArray(this.events.model)) {
-      // Subscribe to multiple event types
-      this.events.model.forEach(eventType => {
-        this.eventManager.addEventListener(eventType, this._handleModelChange);
-      });
-    } else {
-      // Backward compatibility for string event type
-      this.eventManager.addEventListener(this.events.model, this._handleModelChange);
+    // Bind the event handlers to this instance and store references for cleanup
+    // This ensures 'this' refers to the Binding instance inside the handler
+    this._boundHandleViewChange = this._handleViewChange.bind(this);
+    
+    // Listen for changes on the view element - simple approach with no removeEventListener
+    try {
+      // Add the event listener directly - no removeEventListener to avoid registration issues
+      this.element.addEventListener(this.events.view, this._boundHandleViewChange);
+      console.log(`Added view event listener for ${this.events.view} event`);
+      
+      // Store a reference to the binding on the element for debugging
+      this.element.__binding = this;
+    } catch (error) {
+      console.error(`Error setting up view event listener for ${this.path}:`, error);
     }
   }
   
@@ -85,9 +87,17 @@ export class Binding {
    * @private
    */
   _handleViewChange(event) {
-    // Get the value from the element
-    let value;
+    // If we're currently updating from a model change, don't propagate this view change
+    // This prevents infinite update loops where model changes trigger view changes which trigger model changes
+    if (this._isUpdatingFromModel) {
+      console.log(`Ignoring view change event during model update for ${this.path}`);
+      return;
+    }
     
+    console.log(`VIEW CHANGE EVENT: ${this.path}, event type: ${event.type}`);
+    
+    // Get the value from the element based on the attribute
+    let value;
     if (this.attribute === 'value') {
       value = this.element.value;
     } else if (this.attribute === 'checked') {
@@ -96,10 +106,10 @@ export class Binding {
       value = this.element[this.attribute] || this.element.getAttribute(this.attribute);
     }
     
-    // Parse the value before updating the model
+    // Parse the value using the provided parser
     const parsedValue = this.parser(value);
     
-    // Update the model
+    // Update the model by dispatching VIEW_TO_MODEL_PROPERTY_CHANGED event
     this._updateModelValue(parsedValue);
   }
   
@@ -108,10 +118,19 @@ export class Binding {
    * @param {Object} event - The model change event
    * @private
    */
-  _handleModelChange(event) {
+  handleModelChange(event) {
     // Only update if the changed property matches our path
     if (event.path === this.path) {
-      this._updateViewFromModel();
+      try {
+        // Set the flag to prevent view change events from triggering model updates
+        this._isUpdatingFromModel = true;
+        
+        // Update the view with the new model value
+        this._updateViewFromModel();
+      } finally {
+        // Always reset the flag, even if an error occurs
+        this._isUpdatingFromModel = false;
+      }
     }
   }
   
@@ -146,15 +165,59 @@ export class Binding {
   }
   
   /**
-   * Update the model with a new value
+   * Determine the appropriate view event based on element type and attribute
+   * @param {Object} options - The binding options
+   * @returns {string} The event name to use
+   * @private
+   */
+  _determineViewEvent(options) {
+    console.log('_determineViewEvent called for element:', options.element.tagName, options.element.type || 'n/a', 'attribute:', options.attribute || 'value');
+    
+    // If explicitly specified in options, use that
+    if (options.events && options.events.view) {
+      console.log('Using explicitly specified event:', options.events.view);
+      return options.events.view;
+    }
+    
+    const element = options.element;
+    const attribute = options.attribute || 'value';
+    
+    // For checkboxes, use 'change' event instead of 'input'
+    if (element.tagName === 'INPUT' && element.type === 'checkbox') {
+      return 'change';
+    }
+    
+    // For select elements, use 'change' event
+    if (element.tagName === 'SELECT') {
+      return 'change';
+    }
+    
+    // For radio buttons, use 'change' event
+    if (element.tagName === 'INPUT' && element.type === 'radio') {
+      return 'change';
+    }
+    
+    // Default to 'input' for most form elements
+    return 'input';
+  }
+  
+  /**
+   * Request a model update with a new value
    * @param {*} value - The new value
    * @private
    */
   _updateModelValue(value) {
-    // Use ModelPathUtils to set the value at the specified path
-    ModelPathUtils.setValueAtPath(this.model, this.path, value);
+    // If we're currently updating from a model change, don't dispatch view-to-model events
+    // This prevents infinite update loops
+    if (this._isUpdatingFromModel) {
+      console.log(`Skipping model update for path ${this.path} during view update`);
+      return;
+    }
+    
+    console.log(`Binding requesting model update for path ${this.path} with value:`, value);
     
     // Dispatch a view-to-model change event
+    // The ClientModel will handle updating the model and dispatching MODEL_TO_VIEW_PROPERTY_CHANGED
     this.eventManager.dispatchEvent(EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, {
       path: this.path,
       value: value,
@@ -177,34 +240,43 @@ export class Binding {
   }
   
   /**
-   * Destroy the binding and remove event listeners
+   * Clean up the binding and remove event listeners
    */
   destroy() {
-    // Remove view event listener
-    this.element.removeEventListener(this.events.view, this._handleViewChange);
+    console.log(`Destroying binding for ${this.path}`);
     
-    // Remove model event listeners
-    if (Array.isArray(this.events.model)) {
-      // Unsubscribe from multiple event types
-      this.events.model.forEach(eventType => {
-        this.eventManager.removeEventListener(eventType, this._handleModelChange);
-      });
-    } else {
-      // Backward compatibility for string event type
-      this.eventManager.removeEventListener(this.events.model, this._handleModelChange);
+    try {
+      // Remove view event listener
+      if (this.element && this._boundHandleViewChange) {
+        this.element.removeEventListener(this.events.view, this._boundHandleViewChange);
+        console.log(`Removed view event listener for ${this.events.view}`);
+      }
+      
+      // Remove binding reference from element
+      if (this.element && this.element.__binding) {
+        delete this.element.__binding;
+        console.log(`Removed binding reference from element`);
+      }
+      
+      // Remove model event listeners
+      if (this.eventManager && this._boundHandleModelChange) {
+        this.events.model.forEach(eventType => {
+          this.eventManager.removeEventListener(eventType, this._boundHandleModelChange);
+          console.log(`Removed model event listener for ${eventType}`);
+        });
+      }
+      
+      // Clear all references
+      this._boundHandleViewChange = null;
+      this._boundHandleModelChange = null;
+      this.model = null;
+      this.element = null;
+      this.eventManager = null;
+    } catch (error) {
+      console.error('Error destroying binding:', error);
     }
-    
-    // Clear references
-    this.model = null;
-    this.element = null;
-    this.eventManager = null;
-  }
-  
-  _addEventListeners() {
-    // Add event listeners
   }
 }
 
 // Export as named export for consistency
-// Default export maintained for backward compatibility
-export default Binding;
+export { Binding as default };

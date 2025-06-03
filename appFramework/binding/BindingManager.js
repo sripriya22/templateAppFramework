@@ -2,7 +2,9 @@
  * BindingManager - Class to manage bindings between model properties and view elements
  */
 import { Binding } from './Binding.js';
+import { ComponentBinding } from './ComponentBinding.js';
 import { EventTypes } from '../controller/EventTypes.js';
+import { ModelPathUtils } from '../utils/ModelPathUtils.js';
 
 /**
  * BindingManager class for managing bindings between model properties and view elements
@@ -18,9 +20,15 @@ export class BindingManager {
     this.eventManager = this.app.eventManager;
     this.bindings = [];
     
-    // Subscribe to property change events from both directions
-    this.eventManager.addEventListener(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, this._handleModelPropertyChanged.bind(this));
-    this.eventManager.addEventListener(EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, this._handleModelPropertyChanged.bind(this));
+    // Subscribe to property change events with separate handlers for each direction
+    this.eventManager.addEventListener(
+      EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, 
+      this._handleModelToViewPropertyChanged.bind(this)
+    );
+    this.eventManager.addEventListener(
+      EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, 
+      this._handleViewToModelPropertyChanged.bind(this)
+    );
     this.createBinding = this.createBinding.bind(this);
     this.removeBinding = this.removeBinding.bind(this);
     this.removeAllBindings = this.removeAllBindings.bind(this);
@@ -54,6 +62,35 @@ export class BindingManager {
     
     // Log binding creation
     console.log(`Created binding for ${options.path} to element`, options.element);
+    
+    return binding;
+  }
+  
+  /**
+   * Create a component binding for component-wide model updates
+   * @param {Object} options - Binding options
+   * @param {Object} options.model - The model object to bind to
+   * @param {string} options.path - The path to the model property (usually '')
+   * @param {HTMLElement} options.element - The component's root element
+   * @param {Function} options.updateCallback - Function to call when model changes
+   * @param {Object} options.component - The component instance
+   * @returns {ComponentBinding} The created component binding
+   */
+  createComponentBinding(options) {
+    // Add the event manager to the options
+    const bindingOptions = {
+      ...options,
+      eventManager: this.eventManager
+    };
+    
+    // Create the component binding
+    const binding = new ComponentBinding(bindingOptions);
+    
+    // Store the binding
+    this.bindings.push(binding);
+    
+    // Log binding creation
+    console.log(`Created component binding for ${options.component.constructor.name}`);
     
     return binding;
   }
@@ -140,7 +177,19 @@ export class BindingManager {
    * @returns {Binding[]} Array of bindings for the path
    */
   getBindingsForPath(path) {
-    return this.bindings.filter(binding => binding.path === path);
+    return this.bindings.filter(binding => {
+      // Match bindings with the exact path
+      if (binding.path === path) {
+        return true;
+      }
+      
+      // Match component bindings with empty path (these should be notified of all changes)
+      if (binding instanceof ComponentBinding && binding.path === '') {
+        return true;
+      }
+      
+      return false;
+    });
   }
   
   /**
@@ -153,24 +202,50 @@ export class BindingManager {
   }
   
   /**
-   * Handle model property change events
+   * Handle view-to-model property change events
    * @param {Object} eventData - The event data
    * @private
    */
-  _handleModelPropertyChanged(eventData) {
-    // Find bindings that match the changed path
-    const matchingBindings = this.getBindingsForPath(eventData.path);
+  _handleViewToModelPropertyChanged(eventData) {
+    // Get the path and value from the event
+    const { path, value } = eventData;
     
-    // Update the view for each matching binding
-    matchingBindings.forEach(binding => {
-      // Only update if the source isn't the binding itself to avoid loops
-      if (eventData.source !== 'binding') {
-        binding.updateViewFromModel();
-      }
-    });
+    // Find bindings that match the changed path
+    const matchingBindings = this.getBindingsForPath(path);
     
     if (matchingBindings.length > 0) {
-      console.log(`Updated ${matchingBindings.length} bindings for path ${eventData.path}`);
+      // Get the model from the first matching binding
+      const model = matchingBindings[0].model;
+      
+      // Update the model (could add validation here)
+      ModelPathUtils.setValueAtPath(model, path, value);
+      
+      // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
+      this.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+        path: path,
+        value: value,
+        source: 'binding_manager'
+      });
+      
+      console.log(`Updated model for path ${path} and dispatched MODEL_TO_VIEW_PROPERTY_CHANGED`);
+    }
+  }
+  
+  /**
+   * Handle model-to-view property change events
+   * @param {Object} eventData - The event data
+   * @private
+   */
+  _handleModelToViewPropertyChanged(eventData) {
+    // Find bindings that match the changed path
+    const matchingBindings = this.getBindingsForPath(eventData.path);    
+    
+    // Update regular bindings
+    if (matchingBindings.length > 0) {
+      console.log(`Updating ${matchingBindings.length} regular bindings for path ${eventData.path}`);
+      matchingBindings.forEach(binding => {
+        binding.handleModelChange(eventData);
+      });
     }
   }
 }

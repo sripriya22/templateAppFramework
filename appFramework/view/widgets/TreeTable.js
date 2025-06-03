@@ -476,4 +476,60 @@ export class TreeTable {
         // need to store the original data and traverse it by path
         return null;
     }
+    
+    /**
+     * Find a node in the tree table by its path
+     * @param {string} path - The path to the node
+     * @returns {Object} - Object containing the node row and data, or null if not found
+     */
+    findNodeByPath(path) {
+        if (!path) return null;
+        
+        // Normalize the path for comparison
+        const normalizedPath = path.replace(/\[(\"|\')([^\"\']+)(\"|\')\]/g, '.$2');
+        
+        // Find the row with the matching path attribute
+        const rows = Array.from(this.tbody.querySelectorAll('tr[data-path]'));
+        
+        for (const row of rows) {
+            const rowPath = row.getAttribute('data-path');
+            if (rowPath === path || rowPath === normalizedPath) {
+                return {
+                    row,
+                    path: rowPath,
+                    level: parseInt(row.getAttribute('data-level') || '0', 10),
+                    type: row.getAttribute('data-type'),
+                    expanded: row.querySelector('.toggle-icon')?.textContent === '▼'
+                };
+            }
+        }
+        
+        // If exact match not found, try to find the closest parent path
+        // This is useful when the specific path doesn't have its own row
+        // (e.g., when the parent object is collapsed)
+        const pathParts = normalizedPath.split('.');
+        
+        while (pathParts.length > 1) {
+            // Remove the last part to get the parent path
+            pathParts.pop();
+            const parentPath = pathParts.join('.');
+            
+            for (const row of rows) {
+                const rowPath = row.getAttribute('data-path');
+                if (rowPath === parentPath) {
+                    // Found a parent node
+                    return {
+                        row,
+                        path: rowPath,
+                        level: parseInt(row.getAttribute('data-level') || '0', 10),
+                        type: row.getAttribute('data-type'),
+                        expanded: row.querySelector('.toggle-icon')?.textContent === '▼',
+                        isParent: true  // Flag indicating this is a parent of the requested path
+                    };
+                }
+            }
+        }
+        
+        return null;
+    }
 }
