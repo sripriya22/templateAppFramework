@@ -593,6 +593,34 @@ export class AbstractApp {
   }
   
   /**
+   * Sets the MATLAB HTML component for integration
+   * @param {Object} htmlComponent - The MATLAB HTML component instance
+   */
+  setHTMLComponent(htmlComponent) {
+    if (!htmlComponent) {
+      console.error('Invalid HTML component provided');
+      return;
+    }
+    
+    this._htmlComponent = htmlComponent;
+    console.log('MATLAB HTML component successfully connected');
+    
+    // Notify the application that the MATLAB component is ready
+    if (this._eventManager) {
+      this._eventManager.dispatch({
+        type: 'MATLAB_COMPONENT_READY',
+        data: { component: htmlComponent }
+      });
+    }
+    
+    // Resolve the HTML component promise if it exists
+    if (this._htmlComponentResolver) {
+      this._htmlComponentResolver(htmlComponent);
+      this._htmlComponentResolver = null;
+    }
+  }
+  
+  /**
    * Check if the app is initialized
    * @returns {boolean} True if initialized
    */
