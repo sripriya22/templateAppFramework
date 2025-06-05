@@ -1,20 +1,8 @@
 import { BaseComponent } from './BaseComponent.js';
 import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
-import { loadComponentConfig } from '../../utils/ConfigLoader.js';
-import { EventTypes } from '../../controller/EventTypes.js';
 
-// Load external CSS file
-function loadStyles() {
-  if (typeof document !== 'undefined') {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = '../../../appFramework/view/styles/ModelPanel.css';
-    document.head.appendChild(link);
-  }
-}
-
-// Load styles when the module is imported
-loadStyles();
+// CSS is now loaded in the main HTML file
+// This prevents duplicate loading and path resolution issues
 
 /**
  * ModelPanel component for displaying form fields for model properties
@@ -63,18 +51,26 @@ export class ModelPanel extends BaseComponent {
     }
     
     /**
-     * Load configuration using the ConfigLoader
+     * Load configuration directly from the app
      * @private
      */
     async _loadConfig() {
         try {
-            this._config = await loadComponentConfig('ModelPanel');
+            // Get app instance from view
+            const app = this._view?._app;
+            
+            if (!app) {
+                throw new Error('App instance not available from view');
+            }
+            
+            // Load config directly from app
+            this._config = await app.loadViewConfigJson('ModelPanel');
             this._configLoaded = true;
             
             // Configuration loaded, but we don't update the view automatically
             // The view will be updated on the next model update event
         } catch (error) {
-            console.warn('Could not load ModelPanel configuration, using defaults');
+            console.warn('Could not load ModelPanel configuration, using defaults:', error.message);
         }
     }
 

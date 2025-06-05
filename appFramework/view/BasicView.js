@@ -4,7 +4,6 @@ import { ModelPanel } from '../../appFramework/view/components/ModelPanel.js';
 import { ModelInspector } from '../../appFramework/view/components/ModelInspector.js';
 import { JSONViewer } from '../../appFramework/view/components/JSONViewer.js';
 import { LogConsole } from '../../appFramework/view/components/LogConsole.js';
-import { loadComponentConfig } from '../utils/ConfigLoader.js';
 
 /**
  * Example app specific View implementation

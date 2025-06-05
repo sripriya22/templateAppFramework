@@ -35,8 +35,9 @@ export class AbstractApp {
 
   /**
    * Create a new AbstractApp instance
+   * @param {Object} options - Initialization options
    */
-  constructor() {
+  constructor(options = {}) {
     /** @private */
     this._eventManager = new EventManager();
     
@@ -91,6 +92,38 @@ export class AbstractApp {
 
   getAppTitle() {
     throw new Error('getAppTitle() must be implemented by subclasses');
+  }
+  
+  /**
+   * Check if we're running in MATLAB environment
+   * @returns {boolean} True if running in MATLAB environment
+   */
+  isMatlabEnvironment() {
+    return window._isMatlabEnv === true;
+  }
+  
+  /**
+   * Get the MATLAB base URL if we're in MATLAB environment
+   * @returns {string} MATLAB base URL or empty string if not in MATLAB
+   */
+  getMatlabBaseUrl() {
+    return window._matlabBaseUrl || '';
+  }
+  
+  /**
+   * Get the base URL for loading app-specific resources
+   * This can be overridden by subclasses if they need a different URL structure
+   * @protected
+   * @returns {string} The base URL for app resources
+   */
+  _getAppBaseUrl() {
+    // Different approach for MATLAB vs browser environment
+    if (this.isMatlabEnvironment()) {
+      return this.getMatlabBaseUrl();
+    } else {
+      // In browser environment, construct path relative to apps folder
+      return `/apps/${this.getRootFolderPath()}`;
+    }
   }
 
 
@@ -255,13 +288,61 @@ export class AbstractApp {
     return this._htmlComponent && this._htmlComponent.isConnected && this._htmlComponent.isConnected();
   }
   
+  // ----------------------------------------------------------------------
+  // ABSTRACT METHODS FOR LOADING APP-SPECIFIC FILES
+  // These must be implemented in the App subclass
+  // ----------------------------------------------------------------------
+  
   /**
+   * Load model definition JSON for a specific class
+   * To be implemented by App subclass
+   * @param {string} className - Name of the model class
+   * @returns {Promise<Object>} - JSON definition of the model class
+   * @throws {Error} If the model definition cannot be loaded
+   */
+  async loadModelDefinitionJson(className) {
+    throw new Error('loadModelDefinitionJson is abstract and must be implemented by App subclass');
+  }
+  
+  /**
+   * Load view configuration JSON for a component
+   * To be implemented by App subclass
+   * @param {string} componentName - Name of the component
+   * @returns {Promise<Object>} - JSON configuration for the component
+   * @throws {Error} If the component configuration cannot be loaded
+   */
+  async loadViewConfigJson(componentName) {
+    throw new Error('loadViewConfigJson is abstract and must be implemented by App subclass');
+  }
+  
+  /**
+   * Get the available test data paths for this app
+   * To be implemented by App subclass
+   * @returns {string[]} - Array of paths to test data JSON files, relative to the app root
+   */
+  getTestDataPaths() {
+    throw new Error('getTestDataPaths is abstract and must be implemented by App subclass');
+  }
+  
+  /**
+   * Load test data JSON from resources
+   * To be implemented by App subclass
+   * @returns {Promise<Object>} - Test data JSON
+   * @throws {Error} If test data cannot be loaded
+   */
+  async loadTestDataJson() {
+    throw new Error('loadTestDataJson is abstract and must be implemented by App subclass');
+  }
+  
+  /**
+   * @deprecated Use loadTestDataJson instead
    * Find the first JSON file in the resources directory
    * @private
    * @returns {Promise<string>} Path to the first JSON file found
    * @throws {Error} If no JSON file is found
    */
   async _findFirstJsonFile() {
+    console.warn('_findFirstJsonFile is deprecated. Use loadTestDataJson instead.');
     try {
       // In a real app, we would use the File System Access API or similar
       // For now, we'll assume the file is in the standard location
@@ -330,15 +411,8 @@ export class AbstractApp {
    */
   async loadTestData() {
     try {
-      // Find and load the first JSON file in resources
-      const jsonFilePath = await this._findFirstJsonFile();
-      const response = await fetch(jsonFilePath);
-      
-      if (!response.ok) {
-        throw new Error(`Failed to load test data from ${jsonFilePath}`);
-      }
-      
-      const testData = await response.json();
+      // Use the abstract method to load test data
+      const testData = await this.loadTestDataJson();
       
       // Dispatch server model updated event - ClientModel will handle this and dispatch CLIENT_MODEL_UPDATED
       this.dispatchClientEvent(
@@ -604,14 +678,6 @@ export class AbstractApp {
     
     this._htmlComponent = htmlComponent;
     console.log('MATLAB HTML component successfully connected');
-    
-    // Notify the application that the MATLAB component is ready
-    if (this._eventManager) {
-      this._eventManager.dispatch({
-        type: 'MATLAB_COMPONENT_READY',
-        data: { component: htmlComponent }
-      });
-    }
     
     // Resolve the HTML component promise if it exists
     if (this._htmlComponentResolver) {

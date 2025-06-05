@@ -54,6 +54,15 @@ export class ClientModel extends EventListener {
     
     /** @private */
     this._pendingChanges = new Map();
+    
+    /** @private */
+    this._modelClasses = {};
+    
+    // Detect if we're in a MATLAB environment
+    this._isMatlabEnv = window.location.search.includes('mre=');
+    if (this._isMatlabEnv) {
+      console.log('MATLAB environment detected.');
+    }
   }
   
   /**
@@ -121,24 +130,23 @@ export class ClientModel extends EventListener {
   }
   
   /**
-   * Load and register model classes and their definitions synchronously
-   * @private
-   */
-  /**
-   * Gets the full path to a model file
-   * @param {string} modelName - The name of the model file (without extension)
-   * @returns {string} The full path to the model file
-   */
-  /**
-   * Gets the full path to a model file
-   * @param {string} modelName - The name of the model file (without extension)
-   * @returns {string} The full path to the model file
+   * Get the import path for a model
+   * @param {string} modelName - The name of the model
+   * @returns {string} The import path
    * @private
    */
   _getModelImportPath(modelName) {
-    // For dynamic imports, we need to use a path that works with the browser's module loading system
-    // The path should be relative to the current file's location in the appFramework/model directory
-    return `../../apps/${this._rootFolderPath}/model/${modelName}.js`;
+    if (this._isMatlabEnv) {
+      // In MATLAB, we need a special approach to handle the unique URL structure
+      
+      // Fallback to document.baseURI if we couldn't extract from script path
+      const baseUrl = new URL('./', document.baseURI).href;
+      console.log(`Using document.baseURI as fallback: ${baseUrl}`);
+      return `${baseUrl}apps/${this._rootFolderPath}/model/${modelName}.js`;
+    } else {
+      // In browser, use path that works with import maps
+      return `apps/${this._rootFolderPath}/model/${modelName}.js`;
+    }
   }
 
   /**
@@ -154,36 +162,140 @@ export class ClientModel extends EventListener {
     return `/apps/${this._rootFolderPath}/data-model/${modelName}.json`;
   }
   
-  /**
-   * Loads all model classes and their definitions
-   * @private
-   * @returns {Promise<boolean>} True if all models were loaded successfully
    */
   async _loadAndRegisterModels() {
-    console.log('Starting to load model classes and definitions...');
-    console.log('Root folder path:', this._rootFolderPath);
-    
     try {
-      // The path to the model index file relative to the current file
-      const indexPath = this._getModelImportPath('index');
-      console.log(`Loading model index from: ${indexPath}`);
+      // Check if we're in a MATLAB environment by looking for the mre parameter in the URL
+      const isMatlabEnv = window.location.search.includes('mre=');
       
-      // Dynamic import using relative path
-      const indexModule = await import(indexPath);
-      // Get all exported model names (excluding default exports)
-      const modelNames = Object.keys(indexModule).filter(key => key !== 'default');
-      //console.log(`Found ${modelNames.length} models in index: ${modelNames.join(', ')}`);
-      
-      if (modelNames.length === 0) {
-        throw new Error('No models found in index.js');
+      // Log the environment we're in
+      if (isMatlabEnv) {
+        console.log('MATLAB environment detected. Using explicit model loading.');
+      } else {
+        console.log('Standard browser environment.');
       }
       
-      // Store the model classes for later use
-      this._modelClasses = {};
+      // Use the app's ModelLoader to get model classes
+      // This works in both environments because it uses explicit imports
+      try {
+        // Import the ModelLoader from the app
+        const modelLoaderPath = this._getModelImportPath('ModelLoader');
+        console.log(`Loading ModelLoader from: ${modelLoaderPath}`);
+        
+        const modelLoader = await import(modelLoaderPath);
+        
+        if (modelLoader && typeof modelLoader.getModelClasses === 'function') {
+          // Get all model classes from the loader
+          const modelClasses = modelLoader.getModelClasses();
+          
+          // Register each model class
+          for (const [modelName, ModelClass] of Object.entries(modelClasses)) {
+            console.log(`Registering model class: ${modelName}`);
+            this._modelManager.registerClass(modelName, ModelClass);
+          }
+          
+          console.log('Model classes registered successfully');
+          
+          // Load model definitions from JSON files
+          await this._loadModelDefinitions();
+          
+          return true;
+        }
+      } catch (error) {
+        console.warn('Error loading model classes:', error);
+        
+        // If we're in a browser environment, try the standard approach
+        if (!isMatlabEnv) {
+          // Standard model loading approach for browser
+          console.log('Falling back to standard model loading approach');
+          
+          console.log('Loading model index from:', this._getModelImportPath('index'));
+          
+          // Import the model index
+          const modelIndex = await import(this._getModelImportPath('index'));
+          
+          if (!modelIndex || !modelIndex.default || !Array.isArray(modelIndex.default)) {
+            throw new Error('Invalid model index format');
+          }
+          
+          // Load each model class
+          for (const modelName of modelIndex.default) {
+            try {
+              console.log(`Loading model class: ${modelName}`);
+              const modelPath = this._getModelImportPath(modelName);
+              const modelModule = await import(modelPath);
+              
+              if (!modelModule || !modelModule[modelName]) {
+                console.warn(`Model class not found in module: ${modelName}`);
+                continue;
+              }
+              
+              // Register the model class
+              this._modelManager.registerClass(modelName, modelModule[modelName]);
+              console.log(`Registered model class: ${modelName}`);
+            } catch (error) {
+              console.error(`Error loading model class ${modelName}:`, error);
+              throw error;
+            }
+          }
+          
+          // Load model definitions
+          await this._loadModelDefinitions();
+          
+          return true;
+        }
+      }
       
-      // First pass: Register all model classes
-      for (const modelName of modelNames) {
-        const ModelClass = indexModule[modelName];
+      // If we get here in MATLAB environment, create a minimal model structure
+      if (isMatlabEnv) {
+        console.log('Creating minimal model structure for MATLAB environment');
+        
+        // Create a placeholder class for the root class
+        const rootClassName = this._rootClassName;
+        console.log(`Registering placeholder class for root class: ${rootClassName}`);
+        
+        const PlaceholderClass = class {
+          constructor(data = {}) {
+            Object.assign(this, data);
+          }
+        };
+        
+        // Register the placeholder class
+        this._modelManager.registerClass(rootClassName, PlaceholderClass);
+        
+        // Create a basic definition for the root class
+        const basicDefinitions = {};
+        basicDefinitions[rootClassName] = {
+          Name: rootClassName,
+          Properties: {
+            id: { Type: 'string', Required: true },
+            name: { Type: 'string', Required: true }
+          }
+        };
+        
+        // Register the definition
+        this._modelManager.loadDefinitions(basicDefinitions);
+        console.log('Basic model definition registered for root class');
+        
+        console.log('Minimal model registration complete for MATLAB environment');
+        return true;
+      }
+      
+      throw new Error('Failed to load model classes');
+    } catch (error) {
+      console.error('Error in _loadAndRegisterModels:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Load model definitions from JSON files
+   * @private
+   */
+  async _loadModelDefinitions() {
+    try {
+      // Load each model definition
+      for (const modelName of this._modelManager.getAllRegisteredClassNames()) {
         
         // Ensure the model class has either a static className property or modelName getter
         if (!ModelClass.className && !ModelClass.modelName) {
@@ -209,13 +321,17 @@ export class ClientModel extends EventListener {
         const ModelClass = this._modelClasses[className];
         
         try {
-          // Use app's abstract method to load model definition JSON
-          if (!this._app) {
-            throw new Error(`Cannot load model definition for ${className}: App reference is missing`);
+          // Load the model definition
+          const dataModelPath = this._getDataModelFetchPath(className);
+          console.log(`Loading definition for ${className} from: ${dataModelPath}`);
+          
+          const response = await fetch(new URL(dataModelPath, window.location.origin + window.location.pathname));
+          if (!response.ok) {
+            console.warn(`Definition not found for ${className}: ${response.status}`);
+            return { className, success: false, error: `HTTP ${response.status}` };
           }
           
-          console.log(`Loading definition for ${className} via App.loadModelDefinitionJson`);
-          const definition = await this._app.loadModelDefinitionJson(className);
+          const definition = await response.json();
           
           // Store the definition on the class for reference
           ModelClass.modelDefinition = definition;
