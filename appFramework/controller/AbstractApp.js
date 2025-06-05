@@ -129,21 +129,31 @@ export class AbstractApp {
 
   
     /**
-     * Create the model instance - override to use a custom model class
-     * @returns {ClientModel} The model instance
+     * Create the model instance using direct model definitions and classes
+     * @returns {Promise<ClientModel>} The model instance
      * @protected
      */
-    createModel() {
-      // Uncomment and modify to use a custom model class
-      // return new CustomModel({ app: this });
+    async createModel() {
+      console.log('Creating model with direct model definitions...');
       
-      // The current directory is the directory containing the index.html file
-      // We don't need to include the directory name in the path since we're already in it
-      return new ClientModel({
-        app: this,
-        rootClassName: this.getRootClassName(),
-        rootFolderPath: this.getRootFolderPath()
-      });
+      try {
+        // Load all model definitions
+        const modelDefinitions = await this.loadAllModelDefinitions();
+        
+        // Load all model classes
+        const modelClasses = await this.loadModelClasses();
+        
+        // Create the ClientModel with directly provided definitions and classes
+        return new ClientModel({
+          app: this,
+          rootClassName: this.getRootClassName(),
+          modelDefinitions: modelDefinitions,
+          modelClasses: modelClasses
+        });
+      } catch (error) {
+        console.error('Error creating model:', error);
+        throw error; // Ensure errors are properly propagated
+      }
     }
 
   /**
@@ -207,8 +217,9 @@ export class AbstractApp {
    */
   async _initApp() {
     try {
-      // Create model
-      this._model = this.createModel();
+      // Create model (async in newer implementations)
+      const modelResult = this.createModel();
+      this._model = modelResult instanceof Promise ? await modelResult : modelResult;
       console.log('Model created');
       
       // Initialize model
@@ -294,17 +305,6 @@ export class AbstractApp {
   // ----------------------------------------------------------------------
   
   /**
-   * Load model definition JSON for a specific class
-   * To be implemented by App subclass
-   * @param {string} className - Name of the model class
-   * @returns {Promise<Object>} - JSON definition of the model class
-   * @throws {Error} If the model definition cannot be loaded
-   */
-  async loadModelDefinitionJson(className) {
-    throw new Error('loadModelDefinitionJson is abstract and must be implemented by App subclass');
-  }
-  
-  /**
    * Load view configuration JSON for a component
    * To be implemented by App subclass
    * @param {string} componentName - Name of the component
@@ -313,6 +313,101 @@ export class AbstractApp {
    */
   async loadViewConfigJson(componentName) {
     throw new Error('loadViewConfigJson is abstract and must be implemented by App subclass');
+  }
+  
+  /**
+   * Load model definition JSON for a specific class
+   * To be implemented by App subclass
+   * @param {string} className - Name of the model class
+   * @returns {Promise<Object>} - JSON definition of the model class
+   * @throws {Error} If the model definition cannot be loaded
+   * @deprecated Use loadAllModelDefinitions instead which loads all definitions at once
+   */
+  async loadModelDefinitionJson(className) {
+    throw new Error('loadModelDefinitionJson is abstract and must be implemented by App subclass');
+  }
+
+  /**
+   * Get the names of all model classes used by this app
+   * To be implemented by App subclass
+   * @returns {string[]} Array of model class names used by this app
+   */
+  getModelClassNames() {
+    throw new Error('getModelClassNames is abstract and must be implemented by App subclass');
+  }
+
+  /**
+   * Load all model class definitions for the app
+   * To be implemented by App subclass
+   * @returns {Promise<Object>} - Object mapping class names to their JSON definitions
+   * @throws {Error} If the model definitions cannot be loaded
+   */
+  async loadAllModelDefinitions() {
+    // Default implementation that uses getModelClassNames and loadModelDefinitionJson
+    const classNames = this.getModelClassNames();
+    
+    // Load all definitions in parallel
+    const definitionPromises = classNames.map(className => this.loadModelDefinitionJson(className));
+    const definitions = await Promise.all(definitionPromises);
+    
+    // Create a map of className to definition
+    const definitionMap = {};
+    classNames.forEach((className, index) => {
+      definitionMap[className] = definitions[index];
+    });
+    
+    return definitionMap;
+  }
+
+  /**
+   * Get the base URL for loading app-specific resources
+   * @private
+   * @returns {string} The base URL for app resources
+   */
+  _getAppBaseUrl() {
+    // Different approach for MATLAB vs browser environment
+    if (this.isMatlabEnvironment()) {
+      return this.getMatlabBaseUrl();
+    } else {
+      // In browser environment, construct path relative to apps folder
+      return `/apps/${this.getRootFolderPath()}`;
+    }
+  }
+  
+  /**
+   * Load all model classes for the app
+   * Default implementation that loads classes from model/index.js
+   * @returns {Promise<Array<Function>>} - Array of model class constructors
+   * @throws {Error} If the model classes cannot be loaded
+   */
+  async loadModelClasses() {
+    console.log('Loading all model classes...');
+    
+    try {
+      // Construct path based on environment
+      const baseUrl = this._getAppBaseUrl();
+      const importPath = `${baseUrl}/model/index.js`;
+      
+      console.log(`Importing model index from: ${importPath}`);
+      
+      // Dynamic import using absolute path
+      const indexModule = await import(importPath);
+      
+      // Get all exported model classes (excluding default export)
+      const modelClassExports = Object.entries(indexModule)
+        .filter(([key]) => key !== 'default')
+        .map(([_, ModelClass]) => ModelClass);
+      
+      if (modelClassExports.length === 0) {
+        throw new Error('No model classes found in index.js');
+      }
+      
+      console.log(`Successfully loaded ${modelClassExports.length} model classes`);
+      return modelClassExports;
+    } catch (error) {
+      console.error('Error loading model classes:', error);
+      throw error; // Ensure errors are properly propagated
+    }
   }
   
   /**

@@ -14,10 +14,11 @@ export class ClientModel extends EventListener {
    * @param {Object} options - Configuration options
    * @param {App} options.app - The main application instance (required)
    * @param {string} options.rootClassName - The name of the root model class (required)
-   * @param {string} options.rootFolderPath - The root folder path for model and data-model folders (required)
+   * @param {Object} options.modelDefinitions - Map of model definitions keyed by class name (required)
+   * @param {Array<Function>} options.modelClasses - Array of model class constructors (required)
    */
   constructor(options = {}) {
-    const { app, rootClassName, rootFolderPath } = options;
+    const { app, rootClassName, modelDefinitions, modelClasses } = options;
     
     if (!app) {
       throw new Error('App instance is required');
@@ -27,8 +28,12 @@ export class ClientModel extends EventListener {
       throw new Error('Root class name is required');
     }
     
-    if (!rootFolderPath) {
-      throw new Error('Root folder path is required');
+    if (!modelDefinitions || Object.keys(modelDefinitions).length === 0) {
+      throw new Error('Model definitions are required');
+    }
+    
+    if (!modelClasses || modelClasses.length === 0) {
+      throw new Error('Model classes are required');
     }
     
     // Initialize EventListener with the app
@@ -41,7 +46,21 @@ export class ClientModel extends EventListener {
     this._rootClassName = rootClassName;
     
     /** @private */
-    this._rootFolderPath = rootFolderPath;
+    this._modelDefinitions = modelDefinitions;
+    
+    /** @private */
+    this._modelClasses = {};
+    
+    // Convert array of model classes to object keyed by className
+    if (modelClasses) {
+      for (const ModelClass of modelClasses) {
+        // Use className or name property to identify the class
+        const className = ModelClass.className || ModelClass.name;
+        if (className) {
+          this._modelClasses[className] = ModelClass;
+        }
+      }
+    }
     
     /** @private */
     this._modelManager = new ModelClassDefinitionManager();
@@ -121,128 +140,70 @@ export class ClientModel extends EventListener {
   }
   
   /**
-   * Load and register model classes and their definitions synchronously
+   * Registers all provided model classes and their definitions
    * @private
-   */
-  /**
-   * Gets the full path to a model file
-   * @param {string} modelName - The name of the model file (without extension)
-   * @returns {string} The full path to the model file
-   */
-  /**
-   * Gets the full path to a model file
-   * @param {string} modelName - The name of the model file (without extension)
-   * @returns {string} The full path to the model file
-   * @private
-   */
-  _getModelImportPath(modelName) {
-    // For dynamic imports, we need to use a path that works with the browser's module loading system
-    // The path should be relative to the current file's location in the appFramework/model directory
-    return `../../apps/${this._rootFolderPath}/model/${modelName}.js`;
-  }
-
-  /**
-   * Gets the full path to a data model definition file
-   * @param {string} modelName - The name of the data model file (without extension)
-   * @returns {string} The full path to the data model file
-   * @private
-   */
-  _getDataModelFetchPath(modelName) {
-    // For fetch requests, we need to use a path that works with the browser's fetch API
-    // The path should be relative to the web root when served by live-server
-    // Since live-server serves from the gQSPSimConfig directory, we need to go up one level
-    return `/apps/${this._rootFolderPath}/data-model/${modelName}.json`;
-  }
-  
-  /**
-   * Loads all model classes and their definitions
-   * @private
-   * @returns {Promise<boolean>} True if all models were loaded successfully
+   * @returns {Promise<boolean>} True if all models were registered successfully
    */
   async _loadAndRegisterModels() {
-    console.log('Starting to load model classes and definitions...');
-    console.log('Root folder path:', this._rootFolderPath);
+    console.log('Starting to register model classes and definitions...');
     
     try {
-      // The path to the model index file relative to the current file
-      const indexPath = this._getModelImportPath('index');
-      console.log(`Loading model index from: ${indexPath}`);
+      // First pass: Register all model classes
+      const classNames = Object.keys(this._modelClasses);
+      console.log(`Registering ${classNames.length} model classes...`);
       
-      // Dynamic import using relative path
-      const indexModule = await import(indexPath);
-      // Get all exported model names (excluding default exports)
-      const modelNames = Object.keys(indexModule).filter(key => key !== 'default');
-      //console.log(`Found ${modelNames.length} models in index: ${modelNames.join(', ')}`);
-      
-      if (modelNames.length === 0) {
-        throw new Error('No models found in index.js');
+      if (classNames.length === 0) {
+        throw new Error('No model classes provided');
       }
       
-      // Store the model classes for later use
-      this._modelClasses = {};
-      
-      // First pass: Register all model classes
-      for (const modelName of modelNames) {
-        const ModelClass = indexModule[modelName];
+      for (const className of classNames) {
+        const ModelClass = this._modelClasses[className];
         
-        // Ensure the model class has either a static className property or modelName getter
-        if (!ModelClass.className && !ModelClass.modelName) {
-          console.log(`Adding static className '${modelName}' to model class`);
-          ModelClass.className = modelName;
-        } else if (ModelClass.className && ModelClass.className !== modelName) {
-          console.warn(`Model class ${modelName} has className '${ModelClass.className}' that doesn't match its export name`);
-        } else if (ModelClass.modelName && ModelClass.modelName !== modelName) {
-          console.warn(`Model class ${modelName} has modelName '${ModelClass.modelName}' that doesn't match its export name`);
+        // Ensure the class has a className property
+        if (!ModelClass.className) {
+          console.log(`Setting className '${className}' on model class`);
+          ModelClass.className = className;
         }
-        
-        // Store the class in our local cache
-        const className = ModelClass.className || modelName;
-        this._modelClasses[className] = ModelClass;
         
         // Register the class with the manager
         this._modelManager.registerClass(className, ModelClass);
         console.log(`Registered model class: ${className}`);
       }
       
-      // Second pass: Load and register all model definitions
-      const loadDefinitions = Object.keys(this._modelClasses).map(async (className) => {
-        const ModelClass = this._modelClasses[className];
-        
+      // Second pass: Register all model definitions
+      console.log(`Registering model definitions...`);
+      const definitionNames = Object.keys(this._modelDefinitions);
+      
+      if (definitionNames.length === 0) {
+        throw new Error('No model definitions provided');
+      }
+      
+      for (const className of definitionNames) {
         try {
-          // Use app's abstract method to load model definition JSON
-          if (!this._app) {
-            throw new Error(`Cannot load model definition for ${className}: App reference is missing`);
+          const definition = this._modelDefinitions[className];
+          if (!definition) {
+            console.warn(`Missing definition for ${className}, skipping`);
+            continue;
           }
           
-          console.log(`Loading definition for ${className} via App.loadModelDefinitionJson`);
-          const definition = await this._app.loadModelDefinitionJson(className);
-          
-          // Store the definition on the class for reference
-          ModelClass.modelDefinition = definition;
+          const ModelClass = this._modelClasses[className];
+          if (ModelClass) {
+            // Store the definition on the class for reference
+            ModelClass.modelDefinition = definition;
+          }
           
           // Register the definition with the manager
           this._modelManager.registerClassDefinition(className, definition, ModelClass);
           console.log(`Successfully registered definition for ${className}`);
-          
-          return { className, success: true };
         } catch (error) {
-          console.error(`Error loading definition for ${className}:`, error);
-          return { className, success: false, error };
+          console.error(`Error registering definition for ${className}:`, error);
+          throw new Error(`Failed to register definition for ${className}: ${error.message}`);
         }
-      });
-      
-      // Wait for all definitions to load
-      const results = await Promise.all(loadDefinitions);
-      const failed = results.filter(r => !r.success);
-      
-      if (failed.length > 0) {
-        console.warn(`Failed to load ${failed.length} model definitions`);
-        failed.forEach(f => console.warn(`- ${f.className}: ${f.error?.message || f.error || 'Unknown error'}`));
       }
       
       // Verify the root class is registered and has a definition
       if (!this._modelManager.isClassRegistered(this._rootClassName)) {
-        throw new Error(`Root class ${this._rootClassName} was not registered!`);
+        throw new Error(`Root class ${this._rootClassName} was not registered`);
       }
       
       const rootClassDef = this._modelManager.getDefinition(this._rootClassName);
@@ -250,16 +211,20 @@ export class ClientModel extends EventListener {
         throw new Error(`No definition found for root class: ${this._rootClassName}`);
       }
       
-      // Verify all classes are properly registered
-      for (const className of Object.keys(this._modelClasses)) {
-        if (!this._modelManager.isClassRegistered(className)) {
-          // Re-register the class if it's missing
-          this._modelManager.registerClass(className, this._modelClasses[className]);
-          console.warn(`Re-registered missing class: ${className}`);
+      // Verify all classes have definitions and all definitions have classes
+      for (const className of classNames) {
+        if (!this._modelDefinitions[className]) {
+          throw new Error(`Model class ${className} is missing a definition`);
         }
       }
       
-      console.log(`Model loading complete. Root class ${this._rootClassName} is registered with definition.`);
+      for (const className of definitionNames) {
+        if (!this._modelClasses[className]) {
+          throw new Error(`Model definition ${className} is missing a class`);
+        }
+      }
+      
+      console.log(`Model registration complete. Root class ${this._rootClassName} is registered with definition.`);
       this._initialized = true;
       
       return true;
@@ -268,7 +233,7 @@ export class ClientModel extends EventListener {
       console.error('Error in _loadAndRegisterModels:', error);
       this._initialized = false;
       
-      // Re-throw to be handled by the caller if needed
+      // Re-throw to be handled by the caller
       throw error;
     }
   }
@@ -350,8 +315,7 @@ export class ClientModel extends EventListener {
    */
   getRootInstance() {
     return this._rootInstance || null;
-  }
-  
+  }  
   /**
    * Process a data object and create model instances
    * @private
