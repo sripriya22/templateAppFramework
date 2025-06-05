@@ -379,22 +379,43 @@ export class AbstractApp {
       
       // Load view config if not already provided
       if (!this.viewConfig) {
-        // Get view config name from config or use default
-        const viewConfigName = this.config.viewConfigName || 'defaultView';
-        console.log(`Loading view config: ${viewConfigName}`);
-        
-        // Load view config
-        this.viewConfig = await this.loadViewConfig(viewConfigName);
+        // Get view config name from method or config fallback
+        try {
+          const viewConfigName = this.getViewConfigName ? this.getViewConfigName() : (this.config.viewConfigName || 'defaultView');
+          console.log(`Loading view config: ${viewConfigName}`);
+          
+          // Load view config
+          this.viewConfig = await this.loadViewConfig(viewConfigName);
+        } catch (error) {
+          console.error('Error getting view config name:', error);
+          // Fall back to default if the method fails
+          const defaultViewName = this.config.viewConfigName || 'defaultView';
+          console.log(`Falling back to default view config: ${defaultViewName}`);
+          this.viewConfig = await this.loadViewConfig(defaultViewName);
+        }
       }
       
-      // Load test data if not already provided and it's configured to be used
-      if (!this.testData && this.config.useTestData) {
-        // Get test data file name from config or use default
-        const testDataFileName = this.config.testDataFileName || 'testData.json';
-        console.log(`Loading test data: ${testDataFileName}`);
-        
-        // Load test data
-        this.testData = await this.loadTestData(testDataFileName);
+      // Load test data if not already provided
+      if (!this.testData) {
+        try {
+          // Check if there are any test data paths available
+          const testDataPaths = this.getTestDataPaths ? this.getTestDataPaths() : [];
+          
+          // Only load test data if paths are defined
+          if (testDataPaths && testDataPaths.length > 0) {
+            console.log('Loading test data using paths from getTestDataPaths()');
+            this.testData = await this.loadTestDataJson();
+          } else if (this.config.useTestData) {
+            // Legacy fallback using config
+            const testDataFileName = this.config.testDataFileName || 'testData.json';
+            console.log(`Loading test data using legacy config: ${testDataFileName}`);
+            this.testData = await this.loadTestData(testDataFileName);
+          } else {
+            console.log('No test data paths configured, skipping test data loading');
+          }
+        } catch (error) {
+          console.error('Error loading test data:', error);
+        }
       }
       
       console.log('Required resources loaded successfully');
@@ -464,14 +485,15 @@ export class AbstractApp {
   
   /**
    * Load model definition JSON for a specific class
-   * To be implemented by App subclass
+   * Default implementation that loads from standard path convention
    * @param {string} className - Name of the model class
    * @returns {Promise<Object>} - JSON definition of the model class
    * @throws {Error} If the model definition cannot be loaded
    * @deprecated Use loadAllModelDefinitions instead which loads all definitions at once
    */
   async loadModelDefinitionJson(className) {
-    throw new Error('loadModelDefinitionJson is abstract and must be implemented by App subclass');
+    // Default implementation uses standard path convention
+    return this.loadJsonResource(`data-model/${className}.json`);
   }
 
   /**
@@ -614,60 +636,23 @@ export class AbstractApp {
   
   /**
    * Load test data JSON from resources
-   * To be implemented by App subclass
+   * Default implementation that uses getTestDataPaths() to locate test data
    * @returns {Promise<Object>} - Test data JSON
    * @throws {Error} If test data cannot be loaded
    */
   async loadTestDataJson() {
-    throw new Error('loadTestDataJson is abstract and must be implemented by App subclass');
-  }
-  
-  /**
-   * @deprecated Use loadTestDataJson instead
-   * Find the first JSON file in the resources directory
-   * @private
-   * @returns {Promise<string>} Path to the first JSON file found
-   * @throws {Error} If no JSON file is found
-   */
-  async _findFirstJsonFile() {
-    console.warn('_findFirstJsonFile is deprecated. Use loadTestDataJson instead.');
-    try {
-      // In a real app, we would use the File System Access API or similar
-      // For now, we'll assume the file is in the standard location
-      const response = await fetch('resources/');
-      if (!response.ok) {
-        throw new Error('Failed to read resources directory');
-      }
-      
-      // Parse the directory listing (this is a simplified example)
-      // In a real app, you'd need to parse the HTML response or use a different approach
-      const html = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      
-      // Find all links in the directory listing
-      const links = Array.from(doc.querySelectorAll('a'))
-        .map(a => a.getAttribute('href'))
-        .filter(href => href.endsWith('.json'));
-      
-      if (links.length === 0) {
-        throw new Error('No JSON files found in resources directory');
-      }
-      
-      // Get the first JSON file found
-      const jsonFile = links[0];
-      
-      // Ensure we have a valid path (handle both relative and absolute paths)
-      if (jsonFile.startsWith('http') || jsonFile.startsWith('/')) {
-        return jsonFile;
-      }
-      
-      // For relative paths, ensure we don't duplicate 'resources/'
-      return jsonFile.startsWith('resources/') ? jsonFile : `resources/${jsonFile}`;
-    } catch (error) {
-      console.error('Error finding JSON file:', error);
-      throw new Error('Failed to find a JSON file in resources directory');
+    // Get the paths from getTestDataPaths to maintain a single source of truth
+    const paths = this.getTestDataPaths();
+    
+    if (!paths || paths.length === 0) {
+      throw new Error('No test data paths available');
     }
+    
+    // Use the first path (primary test data file)
+    const filePath = paths[0];
+    
+    // Use loadJsonResource directly with the correct path
+    return this.loadJsonResource(filePath);
   }
   
   /**
