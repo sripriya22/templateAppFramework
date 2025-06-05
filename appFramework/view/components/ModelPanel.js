@@ -325,12 +325,19 @@ export class ModelPanel extends BaseComponent {
         
         // Create a label
         const label = document.createElement('label');
-        label.textContent = propConfig.label || this.formatLabel(propPath.split('.').pop());
+        label.textContent = propConfig.Label || this.formatLabel(propPath.split('.').pop());
         formGroup.appendChild(label);
+        
+        // Get property definition from the model definition
+        const propDef = this._getPropertyDefinition(model._className, propPath);
+        console.log(`Property definition for ${propPath}:`, propDef);
         
         // Create an input field based on the property type, widget type, and editability
         let input;
-        const widgetType = propConfig.widget || this._getDefaultWidgetType(value);
+        // Use property definition type info if available, otherwise fallback to inference
+        const widgetType = propConfig.widget || this._getDefaultWidgetType(value, propConfig, propDef);
+        console.log(`Widget type for ${propPath}: ${widgetType}`);
+        
         const isEditable = propConfig.Editable !== false;
         
         // For non-editable fields (except checkboxes), create a span instead of an input
@@ -349,11 +356,13 @@ export class ModelPanel extends BaseComponent {
         } else {
             // For editable fields or checkboxes, create the appropriate input
             switch (widgetType) {
-            case 'checkbox':
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.className = 'form-check-input';
-                input.checked = Boolean(value);
+                case 'checkbox':
+                    input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.className = 'form-check-input';
+                    input.checked = Boolean(value);
+                    
+                    // Create binding for checkbox
                 
                 // Create binding for checkbox
                 this.createBinding({
@@ -361,7 +370,10 @@ export class ModelPanel extends BaseComponent {
                     path: propPath,
                     element: input,
                     attribute: 'checked',
-                    parser: (val) => Boolean(val)
+                    events: {
+                        view: 'change' // Use 'change' event for checkboxes
+                    },
+                    parser: val => Boolean(val)
                 });
                 break;
                 
@@ -372,6 +384,9 @@ export class ModelPanel extends BaseComponent {
                 input.value = value !== undefined && value !== null ? value : '';
                 
                 // Add min/max/step if specified
+                if (propDef.Min !== undefined) input.min = propDef.Min;
+                if (propDef.Max !== undefined) input.max = propDef.Max;
+                if (propDef.Step !== undefined) input.step = propDef.Step;
                 if (propConfig.min !== undefined) input.min = propConfig.min;
                 if (propConfig.max !== undefined) input.max = propConfig.max;
                 if (propConfig.step !== undefined) input.step = propConfig.step;
@@ -645,6 +660,17 @@ export class ModelPanel extends BaseComponent {
         // Create body
         const tbody = document.createElement('tbody');
         
+        // Get property definition for the array to determine element type
+        const arrayPropDef = this._getPropertyDefinition(model._className, arrayConfig.PropertyPath);
+        console.log(`Array property definition:`, arrayPropDef);
+        
+        // Get element type from array property definition
+        let elementClassName = null;
+        if (arrayPropDef && arrayPropDef.ElementType) {
+            elementClassName = arrayPropDef.ElementType;
+            console.log(`Found array element type: ${elementClassName}`);
+        }
+        
         // Add rows for each item
         array.forEach((item, index) => {
             const row = document.createElement('tr');
@@ -657,8 +683,20 @@ export class ModelPanel extends BaseComponent {
                 const propName = propConfig.PropertyPath;
                 const value = item[propName];
                 
-                // Get property definition
-                const propDef = this._getPropertyDefinition(item._className, propName);
+                // Get property definition - use element type from array definition if available
+                let propDef = null;
+                
+                if (arrayPropDef && arrayPropDef.Type) {
+                    // Get the class name from ElementType
+                    const elementType = arrayPropDef.Type;
+                    console.log(`Looking up property ${propName} in class ${elementType}`);
+                    propDef = this._getPropertyDefinition(elementType, propName);
+                } else if (item && item._className) {
+                    // Fall back to item's class name if array definition doesn't have ElementType
+                    propDef = this._getPropertyDefinition(item._className, propName);
+                }
+                
+                console.log(`Property definition for ${propName}:`, propDef);
                 
                 // Create appropriate widget
                 const widget = this._createWidgetFromMetadata(propConfig, value, propDef);
@@ -804,16 +842,67 @@ export class ModelPanel extends BaseComponent {
     getType(value) {
         if (value === null) return 'null';
         if (Array.isArray(value)) return 'array';
+        if (value instanceof Date) return 'date';
         return typeof value;
     }
     
     /**
-     * Get the default widget type based on the property value type
+     * Get the default widget type based on property definition if available, otherwise fallback to value inference
      * @param {*} value - The property value
+     * @param {Object} propConfig - The property configuration from view config 
+     * @param {Object} propDef - The property definition from model class definition
      * @returns {string} The default widget type
      * @private
      */
-    _getDefaultWidgetType(value) {
+    _getDefaultWidgetType(value, propConfig = {}, propDef = null) {
+        // If we have a property definition with type information, prioritize that
+        if (propDef && propDef.Type) {
+            // Use the explicit type from model definition
+            const defType = propDef.Type.toLowerCase();
+            console.log(`Using property definition type: ${defType} for widget selection`);
+            
+            switch (defType) {
+                case 'boolean':
+                    return 'checkbox';
+                case 'number':
+                case 'integer':
+                case 'float':
+                case 'double':
+                    return 'number';
+                case 'array':
+                    return 'array';
+                case 'object':
+                    return 'object';
+                case 'string':
+                default:
+                    return 'text';
+            }
+        }
+        
+        // Fallback to property name inspection for boolean type hints
+        const propName = propConfig.PropertyPath ? 
+            propConfig.PropertyPath.split('.').pop().toLowerCase() : 
+            (value && typeof value === 'object' && value._id ? value._id.toLowerCase() : '');
+            
+        if (propName && (
+            propName.startsWith('is') || 
+            propName.startsWith('use') || 
+            propName.startsWith('flag') ||
+            propName.startsWith('enable') ||
+            propName.startsWith('has') ||
+            propName === 'active' ||
+            propName === 'required'
+        )) {
+            return 'checkbox';
+        }
+        
+        // Handle string 'true'/'false' values
+        if (typeof value === 'string' && 
+            (value.toLowerCase() === 'true' || value.toLowerCase() === 'false')) {
+            return 'checkbox';
+        }
+        
+        // Last resort: inference from actual value type
         const type = this.getType(value);
         
         switch (type) {
@@ -832,9 +921,11 @@ export class ModelPanel extends BaseComponent {
         }
     }
     
+    // Old _getDefaultWidgetType method removed - using the improved version above
+    
     /**
-     * Format a label from a key
-     * @param {string} key - The key to format
+     * Format a label from a property key
+     * @param {string} key - The property key
      * @returns {string} - The formatted label
      */
     formatLabel(key) {
@@ -970,314 +1061,11 @@ export class ModelPanel extends BaseComponent {
     
     // createObjectField method removed - not used in the current implementation
 
-    /**
-     * Create a table for an array of objects
-     * @param {string} key - The property key
-     * @param {Array} array - The array value
-     * @param {HTMLElement} container - The container to append the table to
-     * @param {string} [propertyPath=''] - The full property path in the model
-     */
-    createArrayField(key, array, container, propertyPath = '') {
-        const formGroup = document.createElement('div');
-        formGroup.className = 'form-group';
+    // removed unused createArrayField method
 
-        // Create label
-        const label = document.createElement('label');
-        label.textContent = this.formatLabel(key);
+    // removed unused createArrayTable method
 
-        // Create array container
-        const arrayContainer = document.createElement('div');
-        arrayContainer.className = 'array-container';
-
-        // Check if array is empty
-        if (array.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-array';
-            emptyMessage.textContent = 'No items';
-            arrayContainer.appendChild(emptyMessage);
-        } else {
-            // Check if array contains objects
-            const firstItem = array[0];
-            const isObjectArray = typeof firstItem === 'object' && firstItem !== null && !Array.isArray(firstItem);
-
-            // Construct the full property path for this array
-            const fullPropertyPath = propertyPath;
-            
-            if (isObjectArray) {
-                // Create a table for array of objects
-                this.createArrayTable(array, arrayContainer, fullPropertyPath);
-            } else {
-                // Create a simple list for array of primitives
-                this.createArrayList(array, arrayContainer, fullPropertyPath);
-            }
-        }
-
-        // Assemble form group
-        formGroup.appendChild(label);
-        formGroup.appendChild(arrayContainer);
-
-        // Add to container
-        container.appendChild(formGroup);
-    }
-
-    /**
-     * Create a table for an array of objects
-     * @param {Array} array - The array of objects
-     * @param {HTMLElement} container - The container to append the table to
-     * @param {string} propertyPath - The path to the array property in the model
-     */
-    createArrayTable(array, container, propertyPath) {
-        if (array.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-array';
-            emptyMessage.textContent = 'No items';
-            container.appendChild(emptyMessage);
-            return;
-        }
-
-        // Get all unique keys from all objects in the array
-        const keys = [];
-        const keyTypes = new Map();
-        
-        // First pass: collect all non-private keys and their types
-        array.forEach(item => {
-            if (typeof item === 'object' && item !== null) {
-                Object.entries(item).forEach(([key, value]) => {
-                    // Skip private properties (starting with _) and functions
-                    if (!key.startsWith('_') && typeof value !== 'function' && !keyTypes.has(key)) {
-                        keyTypes.set(key, this.getType(value));
-                        keys.push(key);
-                    }
-                });
-            }
-        });
-
-        // Create table container for scrolling
-        const tableContainer = document.createElement('div');
-        tableContainer.className = 'array-table-container';
-        
-        // Create table
-        const table = document.createElement('table');
-        table.className = 'array-table';
-
-        // Create header
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-
-        keys.forEach(key => {
-            const th = document.createElement('th');
-            th.textContent = this.formatLabel(key);
-            headerRow.appendChild(th);
-        });
-
-        thead.appendChild(headerRow);
-        table.appendChild(thead);
-
-        // Create body
-        const tbody = document.createElement('tbody');
-
-        array.forEach((item, rowIndex) => {
-            const row = document.createElement('tr');
-
-            keys.forEach(key => {
-                // Skip if this is a private property or function (shouldn't happen due to filtering above, but just in case)
-                if (key.startsWith('_') || typeof item[key] === 'function') {
-                    return;
-                }
-                const cell = document.createElement('td');
-                const value = item ? item[key] : undefined;
-                const type = keyTypes.get(key) || 'string';
-
-                if (type === 'object' || type === 'array') {
-                    cell.textContent = `[${type}]`;
-                } else if (type === 'boolean') {
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = Boolean(value);
-                    checkbox.className = 'form-control';
-                    checkbox.style.width = 'auto';
-                    checkbox.style.margin = '0 auto';
-                    checkbox.style.display = 'block';
-                    cell.style.textAlign = 'center';
-                    cell.appendChild(checkbox);
-                    
-                    // Create binding for this checkbox
-                    // Get the app and model through the view
-                    const app = this._view.getApp();
-                    if (app) {
-                        const model = app.getModel();
-                        if (model) {
-                            // Create path to this array item property
-                            const itemPath = `${propertyPath}[${rowIndex}].${key}`;
-                            console.log(`Creating binding for array item: ${itemPath}`);
-                            
-                            // Create binding for this checkbox
-                            this.createBinding({
-                                model: model,
-                                path: itemPath,
-                                element: checkbox,
-                                attribute: 'checked',
-                                events: {
-                                    view: 'change' // Use 'change' event for checkboxes
-                                }
-                            });
-                        }
-                    }
-                } else {
-                    const input = document.createElement('input');
-                    input.type = type === 'number' ? 'number' : 'text';
-                    input.value = value !== undefined ? String(value) : '';
-                    input.className = 'form-control';
-                    input.style.width = '100%';
-                    input.style.boxSizing = 'border-box';
-                    cell.appendChild(input);
-                    
-                    // Create binding for this input with explicit event handling
-                    // Get the app and model through the view
-                    const app = this._view.getApp();
-                    if (app) {
-                        const model = app.getModel();
-                        if (model) {
-                            // Create path to this array item property
-                            const itemPath = `${propertyPath}[${rowIndex}].${key}`;
-                            console.log(`Creating binding for array item: ${itemPath}`);
-                            
-                            // Create binding for this input, letting Binding._determineViewEvent select the appropriate event
-                            this.createBinding({
-                                model: model,
-                                path: itemPath,
-                                element: input,
-                                attribute: 'value',
-                                parser: type === 'number' ? val => parseFloat(val) : val => val
-                            });
-                        }
-                    }
-                }
-
-                row.appendChild(cell);
-            });
-
-            tbody.appendChild(row);
-        });
-
-        table.appendChild(tbody);
-        tableContainer.appendChild(table);
-        container.appendChild(tableContainer);
-    }
-
-    /**
-     * Create a list for an array of primitive values
-     * @param {Array} array - The array of primitive values
-     * @param {HTMLElement} container - The container to append the list to
-     * @param {string} propertyPath - The path to the array property in the model
-     */
-    createArrayList(array, container, propertyPath) {
-        if (array.length === 0) {
-            const emptyMessage = document.createElement('div');
-            emptyMessage.className = 'empty-array';
-            emptyMessage.textContent = 'No items';
-            container.appendChild(emptyMessage);
-            return;
-        }
-
-        // Create list container
-        const listContainer = document.createElement('div');
-        listContainer.className = 'array-list-container';
-
-        // Create list
-        const list = document.createElement('div');
-        list.className = 'array-list';
-
-        // Determine the type of the first non-null item
-        let itemType = 'string';
-        for (const item of array) {
-            if (item !== null && item !== undefined) {
-                itemType = this.getType(item);
-                break;
-            }
-        }
-
-        // Create list items
-        array.forEach((item, index) => {
-            const listItem = document.createElement('div');
-            listItem.className = 'array-list-item';
-
-            // Create index label
-            const indexLabel = document.createElement('div');
-            indexLabel.className = 'array-index';
-            indexLabel.textContent = `[${index}]`;
-
-            // Create value container
-            const valueContainer = document.createElement('div');
-            valueContainer.className = 'array-value';
-
-            if (itemType === 'boolean') {
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.checked = Boolean(item);
-                checkbox.className = 'form-control';
-                valueContainer.appendChild(checkbox);
-                
-                // Create binding for this checkbox
-                // Get the app and model through the view
-                const app = this._view.getApp();
-                if (app) {
-                    const model = app.getModel();
-                    if (model) {
-                        // Create path to this array item
-                        const itemPath = `${propertyPath}[${index}]`;
-                        console.log(`Creating binding for array item: ${itemPath}`);
-                        
-                        // Create binding for this checkbox
-                        this.createBinding({
-                            model: model,
-                            path: itemPath,
-                            element: checkbox,
-                            attribute: 'checked',
-                            events: {
-                                view: 'change' // Use 'change' event for checkboxes
-                            }
-                        });
-                    }
-                }
-            } else {
-                const input = document.createElement('input');
-                input.type = itemType === 'number' ? 'number' : 'text';
-                input.value = item !== undefined ? String(item) : '';
-                input.className = 'form-control';
-                valueContainer.appendChild(input);
-                
-                // Create binding for this input
-                // Get the app and model through the view
-                const app = this._view.getApp();
-                if (app) {
-                    const model = app.getModel();
-                    if (model) {
-                        // Create path to this array item
-                        const itemPath = `${propertyPath}[${index}]`;
-                        console.log(`Creating binding for array item: ${itemPath}`);
-                        
-                        // Create binding for this input, letting Binding._determineViewEvent select the appropriate event
-                        this.createBinding({
-                            model: model,
-                            path: itemPath,
-                            element: input,
-                            attribute: 'value',
-                            parser: itemType === 'number' ? val => parseFloat(val) : val => val
-                        });
-                    }
-                }
-            }
-
-            // Assemble list item
-            listItem.appendChild(indexLabel);
-            listItem.appendChild(valueContainer);
-            list.appendChild(listItem);
-        });
-
-        listContainer.appendChild(list);
-        container.appendChild(listContainer);
-    }
+    // removed unused createArrayList method
 
     /**
      * Format a property key as a label

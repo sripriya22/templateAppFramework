@@ -163,7 +163,8 @@ export class ClientModel extends EventListener {
         
         // Create synthetic class for each definition
         for (const className of definitionNames) {
-          this._modelClasses[className] = this._createSyntheticModelClass(className);
+          const definition = this._modelDefinitions[className];
+          this._modelClasses[className] = this._createSyntheticModelClass(className, definition);
         }
       }
       
@@ -238,17 +239,38 @@ export class ClientModel extends EventListener {
   /**
    * Creates a synthetic model class from a JSON definition
    * @param {string} className - The name of the class to create
+   * @param {Object} classDefinition - The class definition from JSON
    * @returns {Function} A synthetic model class constructor
    * @private
    */
-  _createSyntheticModelClass(className) {
+  _createSyntheticModelClass(className, classDefinition = {}) {
+    // Extract property definitions to understand types
+    const propertyDefs = classDefinition?.Properties || {};
+    
     // Create a simple class constructor that accepts properties via object
     const SyntheticModelClass = function(data = {}) {
       // Set the _className property first - critical for view components
       this._className = className;
       
-      // Copy all properties from data to this instance
-      Object.assign(this, data);
+      // Process each property based on its type
+      for (const [key, value] of Object.entries(data)) {
+        // Special handling for boolean values to ensure proper type
+        if (typeof value === 'boolean' || 
+            value === 'true' || value === 'false' || 
+            propertyDefs[key]?.Type === 'Boolean') {
+          this[key] = typeof value === 'string' 
+            ? value.toLowerCase() === 'true'
+            : Boolean(value);
+        } else if (value === null || value === undefined) {
+          this[key] = value;
+        } else if (typeof value === 'object') {
+          this[key] = value;
+        } else if (!isNaN(Number(value)) && propertyDefs[key]?.Type === 'Number') {
+          this[key] = Number(value);
+        } else {
+          this[key] = value;
+        }
+      }
       
       // Ensure the instance has an ID
       if (!this.id && !this.ID) {
