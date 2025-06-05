@@ -7,6 +7,7 @@ import { ClientModel } from '../model/ClientModel.js';
 import { MockMATLABComponent } from './MockMATLABComponent.js';
 import { EventTypes } from './EventTypes.js';
 import { BindingManager } from '../binding/BindingManager.js';
+import MatlabResourceLoader from '../utils/MatlabResourceLoader.js';
 
 /**
  * Abstract base class for applications
@@ -42,6 +43,9 @@ export class AbstractApp {
     this._eventManager = new EventManager();
     
     /** @private */
+    this._bindingManager = new BindingManager({ eventManager: this._eventManager, app: this });
+    
+    /** @private */
     this._model = null;
     
     /** @private */
@@ -62,8 +66,13 @@ export class AbstractApp {
     /** @private */
     this._initializationPromise = null;
     
-    /** @private */
-    this._bindingManager = null;
+    // Store preloaded resources if provided
+    this.modelDefinitions = options.modelDefinitions || {};
+    this.viewConfig = options.viewConfig || null;
+    this.testData = options.testData || null;
+    
+    // Configuration for resource loading
+    this.config = options.config || {};
     
     // Bind methods
     this._onServerEvent = this._onServerEvent.bind(this);
@@ -73,6 +82,8 @@ export class AbstractApp {
     // Start waiting for HTML component immediately
     this._initializeApp();
   }
+
+
 
   /**
    * Abstract method to create the model instance
@@ -95,66 +106,141 @@ export class AbstractApp {
   }
   
   /**
-   * Check if we're running in MATLAB environment
+   * Check if we're running in a MATLAB environment
    * @returns {boolean} True if running in MATLAB environment
    */
   isMatlabEnvironment() {
-    return window._isMatlabEnv === true;
+    return MatlabResourceLoader.isMatlabEnvironment();
   }
   
   /**
-   * Get the MATLAB base URL if we're in MATLAB environment
-   * @returns {string} MATLAB base URL or empty string if not in MATLAB
+   * Get the MATLAB base URL if running in MATLAB environment
+   * @returns {string} MATLAB base URL
    */
   getMatlabBaseUrl() {
-    return window._matlabBaseUrl || '';
+    // Get static path from MatlabResourceLoader
+    const staticPath = MatlabResourceLoader.getMatlabStaticPath();
+    
+    if (staticPath) {
+      return window.location.origin + staticPath;
+    }
+    
+    // If we're in a MATLAB environment but don't have a static path,
+    // just return the origin
+    if (this.isMatlabEnvironment()) {
+      return window.location.origin + '/';
+    }
+    
+    return '';
+  }
+  
+  /**
+   * Builds a resource path for this app
+   * @param {string} relativePath - Path relative to app root
+   * @returns {string} The full resource path
+   */
+  buildResourcePath(relativePath) {
+    return MatlabResourceLoader.buildResourcePath(
+      this.getRootFolderPath(),
+      relativePath
+    );
+  }
+  
+  /**
+   * Loads a JSON resource
+   * @param {string} relativePath - Path relative to app root
+   * @returns {Promise<Object>} The parsed JSON data
+   */
+  async loadJsonResource(relativePath) {
+    const fullPath = this.buildResourcePath(relativePath);
+    console.log(`Loading JSON from: ${fullPath}`);
+    
+    const response = await fetch(fullPath);
+    if (!response.ok) {
+      throw new Error(`Failed to load resource ${relativePath}: ${response.status} ${response.statusText}`);
+    }
+    
+    return await response.json();
+  }
+  
+  /**
+   * Loads a model definition JSON file
+   * @param {string} className - Class name for the model
+   * @returns {Promise<Object>} The parsed model definition
+   */
+  async loadModelDefinition(className) {
+    return this.loadJsonResource(`data-model/${className}.json`);
+  }
+  
+  /**
+   * Loads the view configuration JSON file
+   * @param {string} viewName - Name of the view configuration
+   * @returns {Promise<Object>} The parsed view configuration
+   */
+  async loadViewConfig(viewName) {
+    return this.loadJsonResource(`view/config/${viewName}.json`);
+  }
+  
+  /**
+   * Loads test data JSON file
+   * @param {string} fileName - Optional name of test data file (default: 'testData.json')
+   * @returns {Promise<Object>} The parsed test data
+   */
+  async loadTestData(fileName = 'testData.json') {
+    return this.loadJsonResource(`test-data/${fileName}`);
   }
   
   /**
    * Get the base URL for loading app-specific resources
    * This can be overridden by subclasses if they need a different URL structure
    * @protected
-   * @returns {string} The base URL for app resources
+   * @returns {string} Base URL for app resources
    */
   _getAppBaseUrl() {
-    // Different approach for MATLAB vs browser environment
+    // If we're in MATLAB environment, use the MATLAB base URL with static path
     if (this.isMatlabEnvironment()) {
-      return this.getMatlabBaseUrl();
-    } else {
-      // In browser environment, construct path relative to apps folder
-      return `/apps/${this.getRootFolderPath()}`;
+      const matlabBaseUrl = this.getMatlabBaseUrl();
+      const staticPath = 'static';
+      const folderPath = this.getRootFolderPath();
+      
+      // Construct URL like: https://127.0.0.1:31515/static/gPKPDSimConfig/
+      const appBaseUrl = `${matlabBaseUrl}${staticPath}/${folderPath}/`;
+      console.log(`MATLAB app base URL: ${appBaseUrl}`);
+      return appBaseUrl;
     }
+    
+    // Default for browser environment
+    return `/apps/${this.getRootFolderPath()}/`;
   }
 
 
   
     /**
-     * Create the model instance using direct model definitions and classes
-     * @returns {Promise<ClientModel>} The model instance
-     * @protected
-     */
-    async createModel() {
-      console.log('Creating model with direct model definitions...');
+   * Create the model instance using direct model definitions
+   * @returns {Promise<ClientModel>} The model instance
+   * @protected
+   */
+  async createModel() {
+    console.log('Creating model with direct model definitions...');
+    
+    try {
+      // Load all model definitions
+      const modelDefinitions = await this.loadAllModelDefinitions();
       
-      try {
-        // Load all model definitions
-        const modelDefinitions = await this.loadAllModelDefinitions();
-        
-        // Load all model classes
-        const modelClasses = await this.loadModelClasses();
-        
-        // Create the ClientModel with directly provided definitions and classes
-        return new ClientModel({
-          app: this,
-          rootClassName: this.getRootClassName(),
-          modelDefinitions: modelDefinitions,
-          modelClasses: modelClasses
-        });
-      } catch (error) {
-        console.error('Error creating model:', error);
-        throw error; // Ensure errors are properly propagated
-      }
+      // Create the ClientModel with directly provided definitions only
+      // No model classes are loaded - using pure JSON definitions
+      return new ClientModel({
+        app: this,
+        rootClassName: this.getRootClassName(),
+        modelDefinitions: modelDefinitions,
+        // No model classes - empty array
+        modelClasses: []
+      });
+    } catch (error) {
+      console.error('Error creating model:', error);
+      throw error; // Ensure errors are properly propagated
     }
+  }
 
   /**
    * Create the view instance - can be overridden by subclasses
@@ -217,6 +303,11 @@ export class AbstractApp {
    */
   async _initApp() {
     try {
+      console.log('Starting app initialization...');
+      
+      // Load required resources if not already loaded
+      await this._loadRequiredResources();
+      
       // Create model (async in newer implementations)
       const modelResult = this.createModel();
       this._model = modelResult instanceof Promise ? await modelResult : modelResult;
@@ -250,18 +341,74 @@ export class AbstractApp {
       console.log('App initialized successfully');
       
       // Dispatch initialization event
-      // Note: We don't need to manually add timestamp as our enhanced EventTypes.create method adds it automatically
       this.dispatchClientEvent(EventTypes.APP_INITIALIZED, {
         appName: this.constructor.name,
         version: this.version || '1.0.0'
       });
-      console.log('App initialized successfully');
     } catch (error) {
       console.error('Error initializing app:', error);
       throw error;
     }
   }
-  
+
+  /**
+   * Load required JSON resources if they haven't been preloaded
+   * @private
+   * @returns {Promise<void>}
+   */
+  async _loadRequiredResources() {
+    // Show loading indicator if exists
+    if (this.appNode) {
+      this.appNode.classList.add('loading');
+    }
+    
+    try {
+      // Load model definitions if not already provided
+      if (!this.modelDefinitions || Object.keys(this.modelDefinitions).length === 0) {
+        // Get model class names from config or use default method
+        const classNames = this.config.modelClassNames || this.getModelClassNames() || [];
+        console.log(`Loading model definitions for: ${classNames.join(', ')}`);
+        
+        // Load each model definition
+        const definitionsMap = {};
+        for (const className of classNames) {
+          definitionsMap[className] = await this.loadModelDefinition(className);
+        }
+        this.modelDefinitions = definitionsMap;
+      }
+      
+      // Load view config if not already provided
+      if (!this.viewConfig) {
+        // Get view config name from config or use default
+        const viewConfigName = this.config.viewConfigName || 'defaultView';
+        console.log(`Loading view config: ${viewConfigName}`);
+        
+        // Load view config
+        this.viewConfig = await this.loadViewConfig(viewConfigName);
+      }
+      
+      // Load test data if not already provided and it's configured to be used
+      if (!this.testData && this.config.useTestData) {
+        // Get test data file name from config or use default
+        const testDataFileName = this.config.testDataFileName || 'testData.json';
+        console.log(`Loading test data: ${testDataFileName}`);
+        
+        // Load test data
+        this.testData = await this.loadTestData(testDataFileName);
+      }
+      
+      console.log('Required resources loaded successfully');
+    } catch (error) {
+      console.error('Error loading resources:', error);
+      throw new Error(`Failed to load required resources: ${error.message}`);
+    } finally {
+      // Remove loading indicator
+      if (this.appNode) {
+        this.appNode.classList.remove('loading');
+      }
+    }
+  }
+
   /**
    * Initialize the HTML component, either from provided instance or create a mock
    * @param {Object} [htmlComponent] - Optional HTML component instance
@@ -367,7 +514,30 @@ export class AbstractApp {
   _getAppBaseUrl() {
     // Different approach for MATLAB vs browser environment
     if (this.isMatlabEnvironment()) {
-      return this.getMatlabBaseUrl();
+      const matlabBase = this.getMatlabBaseUrl();
+      
+      // Extract the full path structure from current URL for MATLAB environments
+      const currentUrl = window.location.href;
+      const currentPath = window.location.pathname;
+      
+      // Check if the current URL contains the static path structure
+      if (currentPath.includes('/static/')) {
+        // Extract the path up to the app folder name
+        // Format is typically: /static/{uniqueId}/{guid}/{appFolder}/...
+        const pathMatch = currentPath.match(/(\/static\/[^\/]+\/[^\/]+\/[^\/]+\/)/); // Match /static/id/guid/folder/
+        
+        if (pathMatch && pathMatch[1]) {
+          const staticPath = pathMatch[1]; // Includes trailing slash
+          console.log('Using MATLAB static path:', staticPath);
+          return matlabBase + staticPath.substring(1); // Remove leading slash as matlabBase ends with one
+        }
+      }
+      
+      // Fallback to basic static path if we couldn't extract the full path
+      const appFolder = this.getRootFolderPath();
+      const fallbackPath = `static/${appFolder}/`;
+      console.log('Falling back to MATLAB path:', matlabBase + fallbackPath);
+      return matlabBase + fallbackPath;
     } else {
       // In browser environment, construct path relative to apps folder
       return `/apps/${this.getRootFolderPath()}`;
@@ -376,21 +546,48 @@ export class AbstractApp {
   
   /**
    * Load all model classes for the app
-   * Default implementation that loads classes from model/index.js
-   * @returns {Promise<Array<Function>>} - Array of model class constructors
-   * @throws {Error} If the model classes cannot be loaded
+   * Default implementation that loads classes from model/index.js if it exists
+   * @returns {Promise<Array<Function>>} - Array of model class constructors or empty array if no model/index.js exists
    */
   async loadModelClasses() {
+    // Check if we should skip model class loading (controlled by config)
+    if (this.config && this.config.skipModelClassLoading === true) {
+      console.log('Skipping model class loading as configured');
+      return [];
+    }
+    
     console.log('Loading all model classes...');
     
     try {
       // Construct path based on environment
-      const baseUrl = this._getAppBaseUrl();
-      const importPath = `${baseUrl}/model/index.js`;
+      let importPath;
+      
+      if (this.isMatlabEnvironment()) {
+        const matlabBase = this.getMatlabBaseUrl();
+        // Adjust path for MATLAB environment which serves files from a different location
+        importPath = `${matlabBase}static/${this.getRootFolderPath()}/model/index.js`;
+        console.log(`MATLAB environment detected for model loading, using path: ${importPath}`);
+      } else {
+        const baseUrl = this._getAppBaseUrl();
+        importPath = `${baseUrl}/model/index.js`;
+        console.log(`Standard browser environment for model loading, using path: ${importPath}`);
+      }
       
       console.log(`Importing model index from: ${importPath}`);
       
-      // Dynamic import using absolute path
+      // Try to fetch the file first to see if it exists
+      try {
+        const response = await fetch(importPath);
+        if (!response.ok) {
+          console.log(`model/index.js not found at ${importPath}, using JSON definitions only`);
+          return [];
+        }
+      } catch (fetchError) {
+        console.log(`Could not fetch model/index.js: ${fetchError.message}, using JSON definitions only`);
+        return [];
+      }
+      
+      // Dynamic import using absolute path only if the file exists
       const indexModule = await import(importPath);
       
       // Get all exported model classes (excluding default export)
@@ -398,15 +595,11 @@ export class AbstractApp {
         .filter(([key]) => key !== 'default')
         .map(([_, ModelClass]) => ModelClass);
       
-      if (modelClassExports.length === 0) {
-        throw new Error('No model classes found in index.js');
-      }
-      
       console.log(`Successfully loaded ${modelClassExports.length} model classes`);
       return modelClassExports;
     } catch (error) {
-      console.error('Error loading model classes:', error);
-      throw error; // Ensure errors are properly propagated
+      console.log('Error loading model classes, proceeding with JSON definitions only:', error.message);
+      return []; // Return empty array to avoid breaking the application
     }
   }
   

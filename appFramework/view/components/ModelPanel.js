@@ -746,30 +746,41 @@ export class ModelPanel extends BaseComponent {
      * @private
      */
     _getPropertyDefinition(className, propPath) {
+        // Use config's ModelClass if className isn't provided but config has it
+        if (!className && this._config && this._config.ModelClass) {
+            console.log(`No _className in model, using ModelClass from config: ${this._config.ModelClass}`);
+            className = this._config.ModelClass;
+        }
+        
         if (!className) {
-            throw new Error('Class name is required');
+            console.warn('No class name available for property definition lookup');
+            return null; // Return null instead of throwing to make UI more resilient
         }
         
         // Get model manager through proper method calls
         // ModelPanel -> View -> App -> ClientModel -> ModelManager
         if (!this._view) {
-            throw new Error('View not available');
+            console.warn('View not available');
+            return null;
         }
         
         const app = this._view.getApp();
         if (!app) {
-            throw new Error('App not available');
+            console.warn('App not available');
+            return null;
         }
         
         const clientModel = app.getModel();
         if (!clientModel) {
-            throw new Error('ClientModel not available');
+            console.warn('ClientModel not available');
+            return null;
         }
         
         // Use the getter method to access the model manager
         const modelManager = clientModel.modelManager;
         if (!modelManager) {
-            throw new Error('ModelManager not available');
+            console.warn('ModelManager not available');
+            return null;
         }
         
         // Handle nested properties
@@ -777,7 +788,12 @@ export class ModelPanel extends BaseComponent {
         const propName = parts[parts.length - 1];
         
         // Get property info from model manager
-        return modelManager.getPropertyInfo(className, propName);
+        try {
+            return modelManager.getPropertyInfo(className, propName);
+        } catch (error) {
+            console.warn(`Error getting property info for ${className}.${propName}:`, error.message);
+            return null;
+        }
     }
     
     /**

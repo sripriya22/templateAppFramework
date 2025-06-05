@@ -145,31 +145,74 @@ export class ModelClassDefinitionManager {
      * Register a class definition
      * @param {string} className - The name of the class
      * @param {Object} definition - The class definition
-     * @param {Function} [classConstructor] - Optional class constructor
-     * @returns {ModelClassDefinitionManager} Returns the manager instance for chaining
+     * @param {Function} [constructor] - The class constructor (optional if already registered)
+     * @returns {boolean} True if registration succeeded
      */
-    registerClassDefinition(className, definition, classConstructor) {
-        if (!className || !definition) {
-            throw new Error('Class name and definition are required');
+    registerClassDefinition(className, definition, constructor) {
+        // Validate inputs
+        if (!className) {
+            throw new Error('Class name is required');
         }
         
-        const classInfo = this._classRegistry.get(className) || {};
+        if (!definition || typeof definition !== 'object') {
+            throw new Error('Definition must be a non-null object');
+        }
         
-        // Update definition
+        // Get existing class info or create new one
+        let classInfo = this._classRegistry.get(className);
+        
+        if (!classInfo) {
+            // If no constructor is provided, create a synthetic one
+            const actualConstructor = constructor || this._createSyntheticConstructor(className);
+            
+            // Create new class info
+            classInfo = {
+                constructor: actualConstructor,
+                definition: null,
+                propertyCache: new Map()
+            };
+            
+            this._classRegistry.set(className, classInfo);
+            console.log(`Registered synthetic class for ${className}`);
+        } else if (constructor && classInfo.constructor !== constructor) {
+            // If constructor is provided and different from registered one, update it
+            classInfo.constructor = constructor;
+        }
+        
+        // Store the definition
         classInfo.definition = definition;
         
-        // Update constructor if provided
-        if (classConstructor) {
-            classInfo.constructor = classConstructor;
-        }
+        // Clear property cache
+        classInfo.propertyCache.clear();
         
-        // Reset property cache
-        classInfo.propertyCache = new Map();
+        return true;
+    }
+    
+    /**
+     * Creates a synthetic constructor for a class
+     * @param {string} className - The name of the class to create
+     * @returns {Function} A simple constructor that sets _className
+     * @private
+     */
+    _createSyntheticConstructor(className) {
+        // Create a simple constructor that sets _className and copies properties
+        const SyntheticClass = function(data = {}) {
+            // Set class name
+            this._className = className;
+            
+            // Copy all properties
+            Object.assign(this, data);
+            
+            // Ensure ID
+            if (!this.id && !this.ID) {
+                this.id = Math.floor(Math.random() * 1000000);
+            }
+        };
         
-        // Update registry
-        this._classRegistry.set(className, classInfo);
+        // Set static className property for consistency
+        SyntheticClass.className = className;
         
-        return this;
+        return SyntheticClass;
     }
 
     /**

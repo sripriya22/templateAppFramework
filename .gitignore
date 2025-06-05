@@ -79,6 +79,10 @@ Thumbs.db
 
 # Apps
 apps/
+gPKPDSimConfig.html
+
+# Manual test files
+testLoadingAndPaths/
 
 # Prompt logs
 promptLog*

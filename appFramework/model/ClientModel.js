@@ -32,9 +32,8 @@ export class ClientModel extends EventListener {
       throw new Error('Model definitions are required');
     }
     
-    if (!modelClasses || modelClasses.length === 0) {
-      throw new Error('Model classes are required');
-    }
+    // Model classes are now optional - we can operate with just JSON definitions
+    // if no custom model classes are provided
     
     // Initialize EventListener with the app
     super(app);
@@ -141,6 +140,7 @@ export class ClientModel extends EventListener {
   
   /**
    * Registers all provided model classes and their definitions
+   * If model classes are not provided, synthetic classes will be created from JSON definitions
    * @private
    * @returns {Promise<boolean>} True if all models were registered successfully
    */
@@ -148,13 +148,28 @@ export class ClientModel extends EventListener {
     console.log('Starting to register model classes and definitions...');
     
     try {
-      // First pass: Register all model classes
+      // First, check if we have JSON definitions
+      const definitionNames = Object.keys(this._modelDefinitions);
+      console.log(`Found ${definitionNames.length} model definitions...`);
+      
+      if (definitionNames.length === 0) {
+        throw new Error('No model definitions provided');
+      }
+      
+      // Initialize synthetic classes if real ones aren't provided
+      if (!this._modelClasses || Object.keys(this._modelClasses).length === 0) {
+        console.log('No model classes provided, generating synthetic classes from JSON definitions');
+        this._modelClasses = {};
+        
+        // Create synthetic class for each definition
+        for (const className of definitionNames) {
+          this._modelClasses[className] = this._createSyntheticModelClass(className);
+        }
+      }
+      
+      // Register all model classes
       const classNames = Object.keys(this._modelClasses);
       console.log(`Registering ${classNames.length} model classes...`);
-      
-      if (classNames.length === 0) {
-        throw new Error('No model classes provided');
-      }
       
       for (const className of classNames) {
         const ModelClass = this._modelClasses[className];
@@ -170,13 +185,8 @@ export class ClientModel extends EventListener {
         console.log(`Registered model class: ${className}`);
       }
       
-      // Second pass: Register all model definitions
+      // Register all model definitions
       console.log(`Registering model definitions...`);
-      const definitionNames = Object.keys(this._modelDefinitions);
-      
-      if (definitionNames.length === 0) {
-        throw new Error('No model definitions provided');
-      }
       
       for (const className of definitionNames) {
         try {
@@ -211,19 +221,6 @@ export class ClientModel extends EventListener {
         throw new Error(`No definition found for root class: ${this._rootClassName}`);
       }
       
-      // Verify all classes have definitions and all definitions have classes
-      for (const className of classNames) {
-        if (!this._modelDefinitions[className]) {
-          throw new Error(`Model class ${className} is missing a definition`);
-        }
-      }
-      
-      for (const className of definitionNames) {
-        if (!this._modelClasses[className]) {
-          throw new Error(`Model definition ${className} is missing a class`);
-        }
-      }
-      
       console.log(`Model registration complete. Root class ${this._rootClassName} is registered with definition.`);
       this._initialized = true;
       
@@ -236,6 +233,47 @@ export class ClientModel extends EventListener {
       // Re-throw to be handled by the caller
       throw error;
     }
+  }
+  
+  /**
+   * Creates a synthetic model class from a JSON definition
+   * @param {string} className - The name of the class to create
+   * @returns {Function} A synthetic model class constructor
+   * @private
+   */
+  _createSyntheticModelClass(className) {
+    // Create a simple class constructor that accepts properties via object
+    const SyntheticModelClass = function(data = {}) {
+      // Set the _className property first - critical for view components
+      this._className = className;
+      
+      // Copy all properties from data to this instance
+      Object.assign(this, data);
+      
+      // Ensure the instance has an ID
+      if (!this.id && !this.ID) {
+        this.id = Math.floor(Math.random() * 1000000);
+      }
+    };
+    
+    // Add static properties
+    SyntheticModelClass.className = className;
+    
+    // Add prototype methods
+    SyntheticModelClass.prototype.toJSON = function() {
+      // Simple serialization - convert the instance to a plain object
+      const serialized = {};
+      for (const [key, value] of Object.entries(this)) {
+        // Skip functions and private properties
+        if (typeof value !== 'function' && !key.startsWith('_')) {
+          serialized[key] = value;
+        }
+      }
+      return serialized;
+    };
+    
+    console.log(`Created synthetic model class: ${className}`);
+    return SyntheticModelClass;
   }
 
   /**
