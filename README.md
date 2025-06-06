@@ -246,9 +246,22 @@ class MyApp extends AbstractApp {
 - **How to use**:
   1. From the project root, run:
      ```bash
-     node appGenerator/utils/create-app.js <AppName> <path/to/example.json>
+     node appGenerator/utils/create-app.js <AppName> --data <path/to/example.json> [options]
      ```
      This creates a new folder in `/apps/<AppName>/` with all required subfolders and copies the example data.
+     
+  **Available options**:
+     
+  - `--data <path>` (required): Path to example JSON data file
+  - `--model-defs-dir <path>`: Path to directory containing model definition JSON files
+  - `--root-class <className>`: Name of the root class for the application
+  - `--force` or `-f`: Overwrite existing app if it exists
+  - `--title <title>`: Custom title for the application
+
+  **Example with all options**:
+  ```bash
+  node appGenerator/utils/create-app.js MyApp --data example.json --model-defs-dir ./model-defs --root-class Configuration --force --title "My Custom App"
+  ```
   2. Edit the generated `data-model/` JSONs to define your model classes.
   3. Generate model classes using the class generator.
   4. Implement your custom logic in `App.js` and custom views/controllers as needed.

@@ -1,17 +1,21 @@
 /**
  * App - Main application class that extends AbstractApp
- * Override createModel and createView methods to customize behavior
+ * This class implements the required abstract methods from AbstractApp.
  * 
- * This file is the main entry point for your application.
- * Customize the createModel and createView methods to use your custom classes.
+ * This is the main entry point for the {{APP_NAME}} application.
+ * It provides app-specific implementations of AbstractApp methods.
  */
 
 // Import from the appFramework package using relative paths
-import AbstractApp from '../../../appFramework/controller/AbstractApp.js';
-import BasicView from '../../../appFramework/view/BasicView.js';
-import { loadComponentConfig } from '../../../appFramework/utils/ConfigLoader.js';
+import { AbstractApp } from '../../../appFramework/controller/AbstractApp.js';
+import { BasicView } from '../../../appFramework/view/BasicView.js';
+
+// Import any additional components needed
 
 export class App extends AbstractApp {
+  // No constructor needed - AbstractApp handles initialization
+  // Configuration is provided by implementing abstract methods
+
   /**
    * Get the default client-side event subscriptions for the app
    * @returns {string[]} Array of client event IDs to subscribe to
@@ -37,55 +41,68 @@ export class App extends AbstractApp {
   }
 
   /**
-   * Create a new App instance
-   */
-  constructor() {
-    super();
-    
-    // Add any additional initialization here
-    console.log('Custom App instance created');
-  }
-
-  /**
    * Get the root class name for the model
    * @returns {string} The root class name
+   * @required - Implementation of AbstractApp abstract method
    */
   getRootClassName() {
-    return ''; // Default root class name, override in your app
+    return '{{ROOT_CLASS_NAME}}'; // Set by app generator
   }
 
   /**
-   * Get the root folder path for the model
+   * Get the root folder path for the app
    * @returns {string} The root folder path
+   * @required - Implementation of AbstractApp abstract method
    */
   getRootFolderPath() {
-    return '.'; // Default folder name, override in your app
+    return '{{APP_FOLDER_PATH}}';
   }
 
   /**
    * Get the application title
    * @returns {string} The application title
+   * @required - Implementation of AbstractApp abstract method
    */
   getAppTitle() {
-    return '';
+    return '{{APP_TITLE}}';
+  }
+
+  /**
+   * Get the view configuration name
+   * @returns {string} The name of the view configuration (without extension)
+   * @required - Implementation of AbstractApp abstract method
+   */
+  getViewConfigName() {
+    return 'ModelPanelConfig';
+  }
+
+  /**
+   * Get the names of all model classes used by this app
+   * @returns {string[]} Array of model class names
+   * @required - Implementation of AbstractApp abstract method
+   */
+  getModelClassNames() {
+    return {{MODEL_CLASS_NAMES}};
+  }
+
+  /**
+   * Get available test data paths
+   * @returns {string[]} Array of paths to test data files
+   * @required - Implementation of AbstractApp abstract method
+   */
+  getTestDataPaths() {
+    return [
+      {{TEST_DATA_PATHS}}
+    ];
   }
 
   /**
    * Create the view instance
-   * @returns {Promise<BasicView>|BasicView} The view instance or a promise that resolves to the view instance
+   * @returns {Promise<BasicView>|BasicView} The view instance
+   * @override - Optional override of AbstractApp method
    */
   async createView() {
     const container = (this.config && this.config.container) || '#app';
-    
-    // Load component configurations
-    let modelPanelConfig = null;
-    try {
-      // Try to load ModelPanel configuration
-      modelPanelConfig = await loadComponentConfig('ModelPanel', this.getRootFolderPath());
-      console.log('Loaded ModelPanel configuration');
-    } catch (error) {
-      console.warn('Could not load ModelPanel configuration:', error);
-    }
     
     // Create view with component configurations
     return new BasicView({
@@ -93,25 +110,28 @@ export class App extends AbstractApp {
       container: container,
       title: this.getAppTitle(),
       componentConfigs: {
-        ModelPanel: modelPanelConfig
-        // Add other component configs as needed
+        ModelPanel: this.viewConfig
       }
     });
   }
 
   /**
-   * Create the model instance - override to use a custom model class
+   * Create the model instance
    * @returns {ClientModel} The model instance
-   * @protected
+   * @override - Optional override of AbstractApp method
+   * 
+   * This method is commented out as we're using the default implementation
+   * in AbstractApp. Uncomment and implement this method if you need a custom
+   * model class or initialization.
+   * 
+   * Example implementation:
+   * createModel() {
+   *   return new CustomModel({ app: this });
+   * }
    */
-  // createModel() {
-  //   // Implement to override default generic ClientModel
-  //   // Example:
-  //   // return new CustomModel({ app: this });
-  // }
 }
 
-// Export the App class
+// Export the App class as default
 export default App;
 
 // Create and export a singleton instance

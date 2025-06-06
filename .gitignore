@@ -79,7 +79,7 @@ Thumbs.db
 
 # Apps
 apps/
-gPKPDSimConfig.html
+*.html
 
 # Manual test files
 testLoadingAndPaths/

@@ -4,42 +4,30 @@ This is a template application created with the Template App Framework, designed
 
 ## Quick Start with Cascade
 
-Copy and paste the following prompt into Cascade, then follow the interactive steps:
+Follow this two-step process to create a new application:
+
+### Step 1: Generate Data Model Definitions
+
+Copy and paste the following prompt into Cascade to analyze your data file and generate model definitions:
 
 ```
-I need to create a new application using the Template App Framework. Please help me complete the setup by following the steps in templateAppFramework/appGenerator/templates/README.md exactly as written. Do not change any existing code in the project folder or create any new files apart from those created explicitly through these instructions. If a command fails, report back but do not try to find a workaround without explicitly checking in. Here are the variables you'll need:
+I need to create JSON model definitions for a new Template App Framework application. Here are the variables I'll be using:
 
 PROJECT_ROOT_FOLDER="templateAppFramework"     # The root folder of the project;
-                                                 must contain the `appFramework`
-                                                 "library" folder & `appGenerator`
-                                                 tools folder
+                                                # must contain the `appFramework`
+                                                # "library" folder & `appGenerator`
+                                                # tools folder
 APP_FOLDER_NAME="myApp"                        # The name for your application
-                                                 folder (will be created in the
-                                                 `apps/` directory)
-ROOT_CLASS_NAME="RootModel"                    # The name for your root model class
+                                               # folder (will be created in the
+                                               # `apps/` directory)
+ROOT_CLASS_NAME="Configuration"                # The name for your root model class
 APP_TITLE="My Application"                     # The display name of your
-                                                application
-EXAMPLE_OBJECT_PATH="resources/testData.json" # Path to your example object file
+                                               # application
+EXAMPLE_OBJECT_PATH="resources/testData.json"  # Path to your example object file
 
 Please proceed with the setup steps in the README. If you encounter any issues, please stop and ask for clarification before proceeding.
-```
 
-## Setup Steps
-
-### Step 1: Create a New Application
-From the project root directory, `$PROJECT_ROOT_FOLDER`, run:
-
-```bash
-# This will create your app in the apps/ directory
-node appGenerator/utils/create-app.js $APP_NAME $EXAMPLE_OBJECT_PATH
-```
-
-Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_FOLDER_NAME` directory.
-
-### Step 2: Create Data Model Definitions
-Use the following prompt to interactively create the data-model JSONs:
-
-Given the app root directory `$APP_FOLDER_NAME`, create data model definitions in `$APP_FOLDER_NAME/data-model` based on the sample object in the `$APP_FOLDER_NAME/resources` folder. The root class should be named `$ROOT_CLASS_NAME`. Use a JSON language-agnostic format with the following structure:
+Please analyze the example object file and create appropriate data model definitions following this format:
 
 ```json
 {
@@ -48,7 +36,7 @@ Given the app root directory `$APP_FOLDER_NAME`, create data model definitions i
     "Description": "Description of the class",
     "Properties": {
         "PropertyName": {
-            "Type": "string",
+            "Type": "String",
             "IsPrimitive": true,
             "IsArray": false,
             "DefaultValue": "",
@@ -65,21 +53,114 @@ Given the app root directory `$APP_FOLDER_NAME`, create data model definitions i
 }
 ```
 
-The SuperClass should always be `AbstractModelObject` unless it should extend a class that has been newly created in `$APP_FOLDER_NAME/model` folder during this step. Do not use any other SuperClass that does not have a *.js definition in either `$APP_FOLDER_NAME/model` or `$PROJECT_ROOT_FOLDER/appFramework/model` folders. Ensure the case of the property names matches the JSON file. Before creating the JSONs, confirm the proposed class hierarchy. You can then tweak it before finalizing the JSON files.
-
-### Step 3: Generate JavaScript Classes
-From the project root directory, `$PROJECT_ROOT_FOLDER`, generate the JavaScript class definitions:
-
-```bash
-node appGenerator/utils/generate-classes.js $APP_FOLDER_NAME
+Show me the complete model definitions I should use, and list all the class names that will be needed.
 ```
 
-This will process the model definitions in `$APP_FOLDER_NAME/data-model` and generate the corresponding JavaScript classes in `$APP_FOLDER_NAME/model`.
+### Step 2: Create the Application
 
-### Step 4: Update App Configuration
-Update `$PROJECT_ROOT_FOLDER/$APP_FOLDER_NAME/App.js` to implement these required methods. The method stubs are already provided in the template; just fill in the values for the root class name, root folder path, and app title. Do not make any other modifications to App.js.
+With the model definitions generated by Cascade from Step 1:
+
+1. Create a temporary directory to store model definitions:
+
+```bash
+mkdir -p /tmp/model-defs
+```
+
+2. Save each model definition JSON file into this directory with proper names (e.g., `RootClassName.json`, `ChildClass.json`, etc.).
+
+3. Run the create-app.js script with the --model-defs-dir parameter:
+
+```bash
+# Create the app directory structure
+node appGenerator/utils/create-app.js ${APP_FOLDER_NAME} ${EXAMPLE_OBJECT_PATH} --root-class ${ROOT_CLASS_NAME} --title "${APP_TITLE}" --model-defs-dir /tmp/model-defs
+```
+
+The script will automatically copy the model definition files to your app's data-model directory and handle all the necessary file setup.
+
+## Setup Process Details
+
+Your application will be created in the `$PROJECT_ROOT_FOLDER/apps/$APP_FOLDER_NAME` directory.
+A root-level HTML file will also be created at `$PROJECT_ROOT_FOLDER/$APP_FOLDER_NAME.html` for serving.
+
+### Step 2: Create ModelPanelConfig.json (Required)
+
+**IMPORTANT**: After generating your app, you must create a correctly formatted `ModelPanelConfig.json` file for the ModelPanel to display properly.
+
+Create or update the file at `view/config/ModelPanelConfig.json` using this format:
+
+```json
+{
+  "ConfigName": "ModelPanelConfig",
+  "Description": "Configuration for the Model Panel view in your app",
+  "ModelClass": "${ROOT_CLASS_NAME}",
+  "PropertyGroups": [
+    {
+      "GroupName": "Basic Settings",
+      "Order": 1,
+      "Properties": [
+        {
+          "PropertyPath": "propertyName",
+          "Label": "Display Name",
+          "Editable": true,
+          "Order": 1
+        },
+        {
+          "PropertyPath": "anotherProperty",
+          "Label": "Another Property",
+          "Editable": true,
+          "Order": 2
+        }
+      ]
+    }
+  ],
+  "ArrayConfigs": [
+    {
+      "PropertyPath": "arrayPropertyName",
+      "Label": "Array Display Name",
+      "Order": 1,
+      "DisplayProperties": [
+        {
+          "PropertyPath": "subProperty1",
+          "Label": "Sub-property 1",
+          "Editable": true,
+          "Order": 1
+        },
+        {
+          "PropertyPath": "subProperty2",
+          "Label": "Sub-property 2",
+          "Editable": true,
+          "Order": 2
+        }
+      ]
+    }
+  ]
+}
+```
+
+### ModelPanelConfig.json Structure
+
+The configuration contains two main sections:
+
+1. **PropertyGroups**: For displaying and editing simple properties of your model
+   - Use this for primitive properties (strings, numbers, booleans)
+   - Group related properties under meaningful section names
+   - Each property must specify a correct `PropertyPath` that exists in your model
+
+2. **ArrayConfigs**: For displaying and editing arrays/collections of objects
+   - Use this for arrays of model objects or complex data structures
+   - The `PropertyPath` refers to the array property in your root model
+   - `DisplayProperties` specify which fields of each array item to display and edit
+   - This will create a table-like UI for the array items
+
+Replace the properties in this template with the actual properties from your root class model definition. The `PropertyPath` values must match property names in your model.
+
+You can use AI tools like Cascade to help generate this configuration based on your model definition JSON files.
+
+### Step 3: Update App Configuration (Optional)
+The App.js file already includes necessary implementation of required abstract methods. If needed, you can customize these implementations:
 
 ```javascript
+// These methods are already implemented in your generated App.js
 getRootClassName() {
     return '$ROOT_CLASS_NAME';
 }
@@ -91,21 +172,33 @@ getRootFolderPath() {
 getAppTitle() {
     return '$APP_TITLE';
 }
+
+getViewConfigName() {
+    return 'ModelPanelConfig';
+}
+
+getModelClassNames() {
+    // Returns model class names from your data-model directory
+}
+
+getTestDataPaths() {
+    // Returns paths to test data in resources directory
+}
 ```
 
-### Step 5: Run the Application
-Start live-server from the `$PROJECT_ROOT_FOLDER` directory to open your application in a browser to work with it disconnected to the server (MATLAB).
+### Step 3: Run the Application
+Start a local web server from the `$PROJECT_ROOT_FOLDER` directory:
 
 ```bash
 live-server
 ```
 
-The command will return a server address. Navigate to: `apps/$APP_FOLDER_NAME/index.html` from the server address.
+The command will return a server address. Navigate to: `$APP_FOLDER_NAME.html` from the server address to access your app.
 
 ## Project Structure
-Now you are ready to start customizing your application. Here is the project structure:
+Your application has the following structure:
+
 ```
-.
 templateAppFramework/
 |
 ├── appFramework/          # Core framework code (library)
@@ -121,28 +214,29 @@ templateAppFramework/
 |
 ├── apps/                  # Directory for all applications generated using the appGenerator
 │   └── myApp/             # Example application (your app folder)
-│       ├── data-model/    # JSON model definitions (used to drive model verification and view settings)
-│       ├── model/         # Generated model classes & optional custom model classes
-│       ├── view/          # Optional custom view files that extend from appFramework
+│       ├── data-model/    # JSON model definitions
 │       ├── resources/     # Example data files
-│       ├── index.html     # Main HTML file
-│       └── App.js         # Main application class (extends appFramework/controller/AbstractApp.js)
+│       ├── view/config/   # View configuration files
+│       ├── myApp.html     # App-specific HTML file (for version control)
+│       └── App.js         # Main application class
 │
+├── myApp.html             # Root-level HTML file for direct access
 └── resources/             # Example object JSON data files
-
-Key Points:
-- The `appFramework` directory contains the core, reusable framework code
-- Each app in the `apps` directory is self-contained but can extend framework components
-- The `appGenerator` helps create new applications with the correct structure
-- Shared resources can be placed in the root `resources` directory
 ```
+
+## Key Features
+
+- **Synthetic Model Classes**: Uses JSON model definitions to create synthetic model classes at runtime
+- **MATLAB Integration**: Designed to work with MATLAB's HTML component (uihtml)
+- **View Configuration**: Customizable UI through JSON configuration
+- **Abstract App Framework**: Clean separation between app-specific and framework code
 
 ## Development Guidelines
 
-- Uses vanilla JavaScript with ES modules
-- No build step required at present; both the appFramework and app must be in the server root folder hierarchy
-- Apps are added to an apps folder that is not tracked in git as part of the templateAppFramework repo but could be tracked as a separate repo
-- Designed to work with MATLAB's HTML component (uihtml) or in a standalone environment for testing
+- Uses vanilla JavaScript with ES modules and Import Maps
+- No build step required
+- Apps are added to an apps/ folder that is not tracked in git as part of the templateAppFramework repo but could be tracked as separate repos
+- Two HTML files are created: one in the app directory for version control, and one at the project root for direct access
 
 ## License
 
