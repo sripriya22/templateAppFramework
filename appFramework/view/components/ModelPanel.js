@@ -22,12 +22,7 @@ export class ModelPanel extends BaseComponent {
         // Store component reference on element for layout access
         this.element.__component = this;
         
-        // Load configuration if not provided
-        if (!this._config) {
-            this._loadConfig();
-        } else {
-            this._configLoaded = true;
-        }
+       this._configLoaded = true;
     }
     
     /**
@@ -47,30 +42,6 @@ export class ModelPanel extends BaseComponent {
         } catch (error) {
             console.error('Error loading view configuration:', error);
             throw error;
-        }
-    }
-    
-    /**
-     * Load configuration directly from the app
-     * @private
-     */
-    async _loadConfig() {
-        try {
-            // Get app instance from view
-            const app = this._view?._app;
-            
-            if (!app) {
-                throw new Error('App instance not available from view');
-            }
-            
-            // Load config directly from app
-            this._config = await app.loadViewConfigJson('ModelPanel');
-            this._configLoaded = true;
-            
-            // Configuration loaded, but we don't update the view automatically
-            // The view will be updated on the next model update event
-        } catch (error) {
-            console.warn('Could not load ModelPanel configuration, using defaults:', error.message);
         }
     }
 

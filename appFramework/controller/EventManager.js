@@ -8,9 +8,6 @@ class EventManager {
   constructor() {
     /** @private */
     this.listeners = new Map();
-    
-    // Store one-time event listeners
-    this.onceListeners = new Map();
   }
 
   /**
@@ -65,46 +62,9 @@ class EventManager {
   removeAllEventListeners(eventType) {
     if (eventType) {
       this.listeners.delete(eventType);
-      this.onceListeners.delete(eventType);
     } else {
       this.listeners.clear();
-      this.onceListeners.clear();
     }
-  }
-
-  /**
-   * Register a one-time event listener that will be automatically removed after being called
-   * @param {string} eventType - The type of event to listen for
-   * @param {Function} listener - The callback function to be called when the event is dispatched
-   * @returns {Function} A function to unregister this listener
-   */
-  once(eventType, listener) {
-    if (typeof eventType !== 'string' || !eventType) {
-      throw new Error('Event type must be a non-empty string');
-    }
-    
-    if (typeof listener !== 'function') {
-      throw new Error('Listener must be a function');
-    }
-    
-    if (!this.onceListeners.has(eventType)) {
-      this.onceListeners.set(eventType, new Set());
-    }
-    
-    const onceListeners = this.onceListeners.get(eventType);
-    onceListeners.add(listener);
-    
-    // Return a function to remove this specific once listener
-    return () => {
-      if (this.onceListeners.has(eventType)) {
-        const listeners = this.onceListeners.get(eventType);
-        listeners.delete(listener);
-        
-        if (listeners.size === 0) {
-          this.onceListeners.delete(eventType);
-        }
-      }
-    };
   }
 
   /**
@@ -153,25 +113,6 @@ class EventManager {
         console.error('Listener function:', listener);
       }
     });
-    
-    // Handle one-time listeners
-    const onceListeners = this.onceListeners.get(eventType);
-    if (onceListeners && onceListeners.size > 0) {
-      // Create a copy of the set to avoid modification during iteration
-      const listenersToCall = new Set(onceListeners);
-      
-      // Clear all once listeners for this event
-      this.onceListeners.set(eventType, new Set());
-      
-      // Call each once listener
-      listenersToCall.forEach(listener => {
-        try {
-          listener(eventData);
-        } catch (error) {
-          console.error(`Error in once event listener for ${eventType}:`, error);
-        }
-      });
-    }
   }
 
   /**
@@ -180,9 +121,7 @@ class EventManager {
    * @returns {boolean} True if there are listeners for this event type
    */
   hasListeners(eventType) {
-    const hasRegular = this.listeners.has(eventType) && this.listeners.get(eventType).size > 0;
-    const hasOnce = this.onceListeners.has(eventType) && this.onceListeners.get(eventType).size > 0;
-    return hasRegular || hasOnce;
+    return this.listeners.has(eventType) && this.listeners.get(eventType).size > 0;
   }
 }
 

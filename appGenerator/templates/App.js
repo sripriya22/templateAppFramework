@@ -101,7 +101,7 @@ export class App extends AbstractApp {
    * @returns {Promise<BasicView>|BasicView} The view instance
    * @override - Optional override of AbstractApp method
    */
-  async createView() {
+  async _createView() {
     const container = (this.config && this.config.container) || '#app';
     
     // Create view with component configurations

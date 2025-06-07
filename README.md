@@ -116,7 +116,7 @@ class MyApp extends AbstractApp {
 - **Lifecycle**:
   1. App instance is created
   2. `_initializeApp()` is called automatically
-  3. `createModel()` and `createView()` are called to instantiate components
+  3. `_createModel()` and `_createView()` are called to instantiate components
   4. Components are initialized in the correct order (model first, then view)
   5. App is ready for user interaction
 

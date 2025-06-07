@@ -19,6 +19,7 @@ export const EventTypes = Object.freeze({
   SERVER_MODEL_UPDATED: 'server_model_updated',
   CLIENT_WARNING: 'client_warning',
   SERVER_WARNING: 'server_warning',
+  MATLAB_METHOD_CALL_REQUEST: 'matlab_method_call_request',
   
   /**
    * Event definitions map
@@ -129,7 +130,20 @@ export const EventTypes = Object.freeze({
     },
     
     // Server Warning Event (same schema as client warning)
-    SERVER_WARNING: 'CLIENT_WARNING'
+    SERVER_WARNING: 'CLIENT_WARNING',
+    
+    // MATLAB Method Call Request Event
+    MATLAB_METHOD_CALL_REQUEST: {
+      required: {
+        requestId: { type: 'string', description: 'Unique identifier for the request' },
+        method: { type: 'string', description: 'Method name to call' },
+        objectPath: { type: 'array', description: 'Path to target object or empty array for static methods' },
+        args: { type: 'object', description: 'Arguments for method call' }
+      },
+      optional: {
+        timeout: { type: 'number', description: 'Timeout in milliseconds' }
+      }
+    }
   },
 
   /**

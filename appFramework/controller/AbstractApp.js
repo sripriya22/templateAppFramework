@@ -4,10 +4,10 @@
  */
 import { EventManager } from './EventManager.js';
 import { ClientModel } from '../model/ClientModel.js';
-import { MockMATLABComponent } from './MockMATLABComponent.js';
 import { EventTypes } from './EventTypes.js';
 import { BindingManager } from '../binding/BindingManager.js';
 import MatlabResourceLoader from '../utils/MatlabResourceLoader.js';
+import { UIHTMLServiceLayer } from '../controller/service/UIHTMLServiceLayer.js';
 
 /**
  * Abstract base class for applications
@@ -35,55 +35,93 @@ export class AbstractApp {
   }
 
   /**
-   * Create a new AbstractApp instance
-   * @param {Object} options - Initialization options
+   * Constructor for AbstractApp
    */
-  constructor(options = {}) {
-    /** @private */
-    this._eventManager = new EventManager();
-    
-    /** @private */
-    this._bindingManager = new BindingManager({ eventManager: this._eventManager, app: this });
-    
-    /** @private */
-    this._model = null;
-    
-    /** @private */
-    this._view = null;
-    
-    /** @private */
-    this._htmlComponent = null;
-    
-    /** @private */
+  constructor() {
+    /**
+     * Flag to track initialization state
+     * @type {boolean}
+     * @protected
+     */
     this._initialized = false;
     
-    /** @private */
-    this._htmlComponentPromise = null;
+    /**
+     * Event manager for the application
+     * @type {EventManager}
+     * @protected
+     */
+    this._eventManager = new EventManager();
+
+    /**
+     * Binding manager for the application
+     * @type {BindingManager}
+     * @protected
+     */
+    this._bindingManager = this._createBindingManager();
     
-    /** @private */
-    this._htmlComponentResolver = null;
-    
-    /** @private */
-    this._initializationPromise = null;
-    
-    // Store preloaded resources if provided
-    this.modelDefinitions = options.modelDefinitions || {};
-    this.viewConfig = options.viewConfig || null;
-    this.testData = options.testData || null;
-    
-    // Configuration for resource loading
-    this.config = options.config || {};
-    
-    // Bind methods
-    this._onServerEvent = this._onServerEvent.bind(this);
-    this._onClientEvent = this._onClientEvent.bind(this);
-    this.waitForHtmlComponent = this.waitForHtmlComponent.bind(this);
-    
-    // Start waiting for HTML component immediately
-    this._initializeApp();
+    /**
+     * ServiceLayer instance for MATLAB communication
+     * @type {ServiceLayer}
+     * @protected
+     */
+    this._serviceLayer = new UIHTMLServiceLayer(this);
   }
 
+  /**
+   * Initialize the application
+   * @returns {Promise<boolean>} Promise that resolves when initialization is complete
+   */
+  async initApp() {
+    if (this._initialized) {
+      console.warn('App already initialized');
+      return true;
+    }
 
+    try {
+      // Initialize both components in parallel and capture results
+      const [_, model] = await Promise.all([
+        this._serviceLayer.init(), // Waits for HTML component or timeout
+        this._createModel() // Create model with provided definitions
+      ]);
+      
+      // Assign model from Promise.all results
+      this._model = model;
+      
+      // Initialize the model
+      await this._model.init();
+      
+      // Once both are ready, continue with app initialization
+      this._view = await this._createView();
+      await this._view.init();
+      
+      // Set up app-specific event subscriptions
+      this._setupEventSubscriptions();
+      
+      // Mark as initialized and dispatch event
+      this._initialized = true;
+      this._eventManager.dispatchEvent(EventTypes.APP_INITIALIZED, {
+        appName: this.constructor.name,
+        version: this.version || '1.0.0'
+      });
+      
+      return true;
+    } catch (error) {
+      console.error('App initialization failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create binding manager
+   * @returns {BindingManager}
+   * @private
+   */
+  _createBindingManager() {
+    return new BindingManager({
+      eventManager: this._eventManager,
+      app: this
+    });
+  }
 
   /**
    * Abstract method to create the model instance
@@ -220,7 +258,7 @@ export class AbstractApp {
    * @returns {Promise<ClientModel>} The model instance
    * @protected
    */
-  async createModel() {
+  async _createModel() {
     console.log('Creating model with direct model definitions...');
     
     try {
@@ -247,226 +285,10 @@ export class AbstractApp {
    * @returns {Promise<View>|View} The view instance or a promise that resolves to the view instance
    * @protected
    */
-  createView() {
-    // The View constructor expects an options object with app and container
-    return new View({
-      app: this,
-      container: '#app',
-      title: this.getAppTitle()
-    });
+  async _createView() {
+    throw new Error('_createView is abstract and must be implemented by App subclass');
   }
 
-  /**
-   * Internal method to handle app initialization flow
-   * @private
-   */
-  async _initializeApp() {
-    // Prevent multiple initializations
-    if (this._initializationPromise) {
-      return this._initializationPromise;
-    }
-
-    this._initializationPromise = (async () => {
-      try {
-        // Wait for HTML component with timeout (1000ms)
-        console.log('Waiting for HTML component (1s timeout)...');
-        
-        try {
-          await this.waitForHtmlComponent(1000);
-          console.log('HTML component received, initializing app...');
-          // If we get here, we're connected to MATLAB
-          await this._initApp();
-        } catch (error) {
-          console.log('No HTML component received, initializing mock component...');
-          if (this.initializeMockComponent) {
-            await this.initializeMockComponent();
-            await this._initApp();
-          } else {
-            throw new Error('No HTML component available and no mock component implementation');
-          }
-        }
-      } catch (error) {
-        console.error('Error during app initialization:', error);
-        throw error;
-      } finally {
-        // Clear the initialization promise when done
-        this._initializationPromise = null;
-      }
-    })();
-
-    return this._initializationPromise;
-  }
-
-  /**
-   * Initialize the application components
-   * @private
-   */
-  async _initApp() {
-    try {
-      console.log('Starting app initialization...');
-      
-      // Load required resources if not already loaded
-      await this._loadRequiredResources();
-      
-      // Create model (async in newer implementations)
-      const modelResult = this.createModel();
-      this._model = modelResult instanceof Promise ? await modelResult : modelResult;
-      console.log('Model created');
-      
-      // Initialize model
-      await this._model.init();
-      console.log('Model initialized');
-      
-      // Create binding manager
-      this._bindingManager = new BindingManager({ app: this });
-      console.log('Binding manager created');
-      
-      // Create view (which may return a Promise)
-      const viewResult = this.createView();
-      
-      // Handle both synchronous and asynchronous view creation
-      this._view = viewResult instanceof Promise ? await viewResult : viewResult;
-      console.log('View created');
-      
-      // Initialize view
-      await this._view.init();
-      console.log('View initialized');
-      
-      // Set up event subscriptions
-      this._setupEventSubscriptions();
-      console.log('Event subscriptions set up');
-      
-      // Mark as initialized
-      this._initialized = true;
-      console.log('App initialized successfully');
-      
-      // Dispatch initialization event
-      this.dispatchClientEvent(EventTypes.APP_INITIALIZED, {
-        appName: this.constructor.name,
-        version: this.version || '1.0.0'
-      });
-    } catch (error) {
-      console.error('Error initializing app:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Load required JSON resources if they haven't been preloaded
-   * @private
-   * @returns {Promise<void>}
-   */
-  async _loadRequiredResources() {
-    // Show loading indicator if exists
-    if (this.appNode) {
-      this.appNode.classList.add('loading');
-    }
-    
-    try {
-      // Load model definitions if not already provided
-      if (!this.modelDefinitions || Object.keys(this.modelDefinitions).length === 0) {
-        // Get model class names from config or use default method
-        const classNames = this.config.modelClassNames || this.getModelClassNames() || [];
-        console.log(`Loading model definitions for: ${classNames.join(', ')}`);
-        
-        // Load each model definition
-        const definitionsMap = {};
-        for (const className of classNames) {
-          definitionsMap[className] = await this.loadModelDefinition(className);
-        }
-        this.modelDefinitions = definitionsMap;
-      }
-      
-      // Load view config if not already provided
-      if (!this.viewConfig) {
-        // Get view config name from method or config fallback
-        try {
-          const viewConfigName = this.getViewConfigName ? this.getViewConfigName() : (this.config.viewConfigName || 'defaultView');
-          console.log(`Loading view config: ${viewConfigName}`);
-          
-          // Load view config
-          this.viewConfig = await this.loadViewConfig(viewConfigName);
-        } catch (error) {
-          console.error('Error getting view config name:', error);
-          // Fall back to default if the method fails
-          const defaultViewName = this.config.viewConfigName || 'defaultView';
-          console.log(`Falling back to default view config: ${defaultViewName}`);
-          this.viewConfig = await this.loadViewConfig(defaultViewName);
-        }
-      }
-      
-      // Load test data if not already provided
-      if (!this.testData) {
-        try {
-          // Check if there are any test data paths available
-          const testDataPaths = this.getTestDataPaths ? this.getTestDataPaths() : [];
-          
-          // Only load test data if paths are defined
-          if (testDataPaths && testDataPaths.length > 0) {
-            console.log('Loading test data using paths from getTestDataPaths()');
-            this.testData = await this.loadTestDataJson();
-          } else if (this.config.useTestData) {
-            // Legacy fallback using config
-            const testDataFileName = this.config.testDataFileName || 'testData.json';
-            console.log(`Loading test data using legacy config: ${testDataFileName}`);
-            this.testData = await this.loadTestData(testDataFileName);
-          } else {
-            console.log('No test data paths configured, skipping test data loading');
-          }
-        } catch (error) {
-          console.error('Error loading test data:', error);
-        }
-      }
-      
-      console.log('Required resources loaded successfully');
-    } catch (error) {
-      console.error('Error loading resources:', error);
-      throw new Error(`Failed to load required resources: ${error.message}`);
-    } finally {
-      // Remove loading indicator
-      if (this.appNode) {
-        this.appNode.classList.remove('loading');
-      }
-    }
-  }
-
-  /**
-   * Initialize the HTML component, either from provided instance or create a mock
-   * @param {Object} [htmlComponent] - Optional HTML component instance
-   * @private
-   */
-  async _initHTMLComponent(htmlComponent) {
-    if (htmlComponent) {
-      this._htmlComponent = htmlComponent;
-    } else {
-      // Wait for MATLAB connection with timeout (2 seconds)
-      const timeout = 2000;
-      const startTime = Date.now();
-      
-      while (!this._htmlComponent && (Date.now() - startTime) < timeout) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-      
-      if (!this._htmlComponent) {
-        console.log('No HTML component provided, using mock');
-        this._htmlComponent = new MockMATLABComponent({
-          onDataRequested: this._onDataRequested.bind(this),
-          onDataReceived: this._onDataReceived.bind(this),
-          onError: this._onError.bind(this)
-        });
-      }
-    }
-  }
-  
-  /**
-   * Check if connected to the server
-   * @returns {boolean} True if connected, false otherwise
-   * @private
-   */
-  _isConnectedToServer() {
-    return this._htmlComponent && this._htmlComponent.isConnected && this._htmlComponent.isConnected();
-  }
-  
   // ----------------------------------------------------------------------
   // ABSTRACT METHODS FOR LOADING APP-SPECIFIC FILES
   // These must be implemented in the App subclass
@@ -654,16 +476,6 @@ export class AbstractApp {
     // Use loadJsonResource directly with the correct path
     return this.loadJsonResource(filePath);
   }
-  
-  /**
-   * Initialize the mock component when not running in MATLAB
-   * @returns {Promise<void>}
-   */
-  async initializeMockComponent() {
-    // Empty implementation - can be overridden by subclasses
-    console.log('Initializing mock component');
-    return Promise.resolve();
-  }
 
   /**
    * Dispatch a client event
@@ -820,75 +632,6 @@ export class AbstractApp {
       }
     }
   }
-
-  /**
-   * Handle a data request from the server
-   * @param {Object} request - The data request
-   * @private
-   */
-  _handleDataRequest(request) {
-    try {
-      const { type, uid, params } = request;
-      let response;
-      
-      if (this._model) {
-        switch (type) {
-          case 'getModel':
-            response = this._model.getModelData?.(params);
-            break;
-          case 'getAllInstances':
-            response = this._model.getAllInstances?.(params?.className);
-            break;
-          case 'getInstance':
-            response = this._model.getInstance?.(uid);
-            break;
-          default:
-            throw new Error(`Unknown request type: ${type}`);
-        }
-      } else {
-        throw new Error('Model not initialized');
-      }
-      
-      this._sendToServer({
-        type: `${type}Response`,
-        uid: request.uid,
-        data: response
-      });
-      
-    } catch (error) {
-      console.error('Error handling data request:', error);
-      this._sendToServer({
-        type: 'error',
-        uid: request?.uid,
-        error: error.message
-      });
-    }
-  }
-
-  /**
-   * Send a message to the server
-   * @param {Object} message - The message to send
-   * @protected
-   */
-  _sendToServer(message) {
-    if (!this._htmlComponent) {
-      console.warn('Cannot send message: HTML component not available');
-      return;
-    }
-    
-    try {
-      if (this._htmlComponent.sendMessageToMATLAB) {
-        this._htmlComponent.sendMessageToMATLAB(JSON.stringify(message));
-      } else if (this._htmlComponent.postMessage) {
-        this._htmlComponent.postMessage(message, '*');
-      } else {
-        console.warn('No method available to send message to server');
-      }
-    } catch (error) {
-      console.error('Error sending message to server:', error);
-    }
-  }
-
   // Public API
   
   /**
@@ -940,22 +683,20 @@ export class AbstractApp {
   }
   
   /**
-   * Sets the MATLAB HTML component for integration
-   * @param {Object} htmlComponent - The MATLAB HTML component instance
+   * Set the MATLAB HTML component
+   * @param {Object} htmlComponent - The MATLAB HTML component
    */
   setHTMLComponent(htmlComponent) {
     if (!htmlComponent) {
       console.error('Invalid HTML component provided');
       return;
     }
-    
-    this._htmlComponent = htmlComponent;
-    console.log('MATLAB HTML component successfully connected');
-    
-    // Resolve the HTML component promise if it exists
-    if (this._htmlComponentResolver) {
-      this._htmlComponentResolver(htmlComponent);
-      this._htmlComponentResolver = null;
+
+    // Pass the HTML component to the service layer
+    if (this._serviceLayer) {
+      this._serviceLayer.setHTMLComponent(htmlComponent);
+    } else {
+      console.error('ServiceLayer not created yet, cannot set HTML component');
     }
   }
   
@@ -968,33 +709,40 @@ export class AbstractApp {
   }
   
   /**
-   * Clean up resources
+   * Destroys the app, removing event listeners and references
    */
   destroy() {
-    if (this._htmlComponent && this._htmlComponent.removeEventListener) {
-      this._htmlComponent.removeEventListener('message', this._onServerEvent);
-    }
-    window.removeEventListener('message', this._onClientEvent);
-    
-    if (this._view && typeof this._view.destroy === 'function') {
-      this._view.destroy();
-    }
-    
-    if (this._model && typeof this._model.destroy === 'function') {
-      this._model.destroy();
-    }
-    
-    if (this._bindingManager && typeof this._bindingManager.destroy === 'function') {
+    // Clean up binding manager
+    if (this._bindingManager) {
       this._bindingManager.destroy();
+      this._bindingManager = null;
+    }
+
+    if (this._view) {
+      this._view.destroy();
+      this._view = null;
     }
     
-    this._eventManager.removeAllListeners();
+    // Clear references
+    if (this._model) {
+      this._model.destroy();
+      this._model = null;
+    }
     
+    // Clean up event manager last
+    if (this._eventManager) {
+      this._eventManager.destroy();
+      this._eventManager = null;
+    }
+    
+    // Clean up service layer
+    if (this._serviceLayer) {
+      this._serviceLayer.destroy();
+      this._serviceLayer = null;
+    }
+    
+    // Reset initialization flag
     this._initialized = false;
-    this._htmlComponent = null;
-    this._model = null;
-    this._view = null;
-    this._bindingManager = null;
   }
 }
 
