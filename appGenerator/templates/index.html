@@ -27,17 +27,54 @@
 </head>
 <body>
     <div id="app"></div>
-    <script type="module" src="{{SCRIPT_PATH}}"></script>
+    
+    <!-- App initialization script -->
     <script>
+        // Store the app instance globally when it's created
+        window.setAppInstance = function(appInstance) {
+            console.log('App instance received, initializing application');
+            window.app = appInstance;
+            initializeApplication();
+        }
+        
+        // Initialize the app with proper sequencing
+        function initializeApplication() {
+            if (!window.app) {
+                console.error('Cannot initialize: App instance not available');
+                return;
+            }
+            
+            console.log('Initializing application');
+            // Initialize the app (returns a Promise)
+            window.app.initApp().then(() => {
+                console.log('Application initialized successfully');
+            }).catch(error => {
+                console.error('Error initializing application:', error);
+            });
+        }
+        
         // Function called by MATLAB to provide the HTML component
         function setup(htmlComponent) {
+            console.log('Setup called with MATLAB HTML component');
             if (window.app) {
-                console.log('Setting up MATLAB HTML component');
+                console.log('Setting HTML component on app instance');
                 window.app.setHTMLComponent(htmlComponent);
             } else {
-                console.error('App instance not available when setting HTML component');
+                // If app isn't ready yet, retry after a short delay
+                console.warn('App not ready, retrying in 500ms...');
+                setTimeout(() => {
+                    if (window.app) {
+                        console.log('Setting HTML component on app instance (retry)');
+                        window.app.setHTMLComponent(htmlComponent);
+                    } else {
+                        console.error('App instance still not available after retry');
+                    }
+                }, 500);
             }
         }
     </script>
+    
+    <!-- Load the app module at the end to ensure HTML is ready -->
+    <script type="module" src="{{SCRIPT_PATH}}"></script>
 </body>
 </html>

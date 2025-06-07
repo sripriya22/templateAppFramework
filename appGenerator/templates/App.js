@@ -9,16 +9,15 @@
 // Import from the appFramework package using relative paths
 import { AbstractApp } from '../../../appFramework/controller/AbstractApp.js';
 import { BasicView } from '../../../appFramework/view/BasicView.js';
+import { EventTypes } from '../../../appFramework/controller/EventTypes.js';
 
 // Import any additional components needed
 
 export class App extends AbstractApp {
-  // No constructor needed - AbstractApp handles initialization
-  // Configuration is provided by implementing abstract methods
-
   /**
    * Get the default client-side event subscriptions for the app
    * @returns {string[]} Array of client event IDs to subscribe to
+   * @override - Optional override of AbstractApp method
    */
   static getDefaultClientSubscriptions() {
     // Add your custom client subscriptions here
@@ -31,6 +30,7 @@ export class App extends AbstractApp {
   /**
    * Get the default server-side event subscriptions for the app
    * @returns {string[]} Array of server event IDs to subscribe to
+   * @override - Optional override of AbstractApp method
    */
   static getDefaultServerSubscriptions() {
     // Add your custom server subscriptions here
@@ -98,16 +98,20 @@ export class App extends AbstractApp {
 
   /**
    * Create the view instance
-   * @returns {Promise<BasicView>|BasicView} The view instance
-   * @override - Optional override of AbstractApp method
+   * @returns {Promise<BasicView>} The view instance with components initialized
+   * @protected - Internal method called during app initialization
+   * @override - Override of AbstractApp method
    */
   async _createView() {
-    const container = (this.config && this.config.container) || '#app';
+    // Load view configuration asynchronously if not already loaded
+    if (!this.viewConfig) {
+      this.viewConfig = await this.loadViewConfig(this.getViewConfigName());
+    }
     
     // Create view with component configurations
     return new BasicView({
       app: this,
-      container: container,
+      container: '#app',
       title: this.getAppTitle(),
       componentConfigs: {
         ModelPanel: this.viewConfig
@@ -117,7 +121,8 @@ export class App extends AbstractApp {
 
   /**
    * Create the model instance
-   * @returns {ClientModel} The model instance
+   * @returns {Promise<ClientModel>} Promise resolving to model instance
+   * @protected - Internal method called during app initialization
    * @override - Optional override of AbstractApp method
    * 
    * This method is commented out as we're using the default implementation
@@ -125,13 +130,13 @@ export class App extends AbstractApp {
    * model class or initialization.
    * 
    * Example implementation:
-   * createModel() {
+   * async _createModel() {
    *   return new CustomModel({ app: this });
    * }
    */
 }
 
-// Export the App class as default
+// Export the App class
 export default App;
 
 // Create and export a singleton instance
@@ -139,10 +144,14 @@ export const app = new App();
 
 // For debugging and MATLAB integration
 if (typeof window !== 'undefined') {
+  // Make app available globally
   window.app = app;
   
-  // Set the app instance for MATLAB integration
+  // Set the app instance for MATLAB integration using the function defined in HTML
   if (typeof window.setAppInstance === 'function') {
+    console.log('Registering app with window.setAppInstance');
     window.setAppInstance(app);
+  } else {
+    console.warn('window.setAppInstance function not found - MATLAB integration may not work');
   }
 }
