@@ -55,6 +55,8 @@ export class UIHTMLServiceLayer extends ServiceLayer {
      */
     async init(timeoutMs = 1000) {
         if (this._initialized) return;
+
+        super.init();
         
         // If component already set, just set up listeners
         if (this._htmlComponent) {
@@ -124,45 +126,64 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         }
         
         // Validate event data
-        const { requestId, methodName, objectPath, args } = event;
+        const { RequestId, MethodName, ObjectPath, Args } = event;
         
-        if (!requestId) {
-            throw new Error('Invalid MATLAB method call request: missing requestId');
+        if (!RequestId) {
+            throw new Error('Invalid MATLAB method call request: missing RequestId');
         }
         
-        if (!methodName) {
-            throw new Error('Invalid MATLAB method call request: missing methodName');
+        if (!MethodName) {
+            throw new Error('Invalid MATLAB method call request: missing MethodName');
         }
         
         // Store the pending call
-        this._pendingCalls.set(requestId, {
+        this._pendingCalls.set(RequestId, {
             timestamp: Date.now(),
-            method: methodName,
-            objectPath
+            MethodName,
+            ObjectPath
         });
         
-        // Process arguments to ensure they are serializable
-        const serializedArgs = (args || []).map(arg => {
-            // Check if the argument is a model object with toJSON method
-            if (arg && typeof arg === 'object' && typeof arg.toJSON === 'function') {
-                console.log(`Serializing model object for MATLAB call: ${methodName}`);
-                return arg.toJSON();
+        // Helper function to recursively serialize model objects
+        const serializeModelObjects = (data) => {
+            // Handle arrays
+            if (Array.isArray(data)) {
+                return data.map(item => serializeModelObjects(item));
             }
-            return arg;
-        });
+            // Handle objects (but not null)
+            else if (data && typeof data === 'object') {
+                // If it's a model object with toJSON method, serialize it
+                if (typeof data.toJSON === 'function') {
+                    console.log(`Serializing model object for MATLAB call: ${MethodName}`);
+                    return data.toJSON();
+                }
+                // Otherwise recursively process object properties
+                const result = {};
+                for (const key in data) {
+                    if (Object.prototype.hasOwnProperty.call(data, key)) {
+                        result[key] = serializeModelObjects(data[key]);
+                    }
+                }
+                return result;
+            }
+            // Return primitives as-is
+            return data;
+        };
+        
+        // Serialize any model objects in the Args object
+        const serializedArgs = Args ? serializeModelObjects(Args) : {};
         
         // Prepare data for MATLAB
         const eventData = {
-            requestId,
-            method: methodName,
-            objectPath: objectPath || '',
-            args: serializedArgs
+            RequestId,
+            MethodName,
+            ObjectPath: ObjectPath || '',
+            Args: serializedArgs
         };
         
         try {
             // Send the event to MATLAB
             this._htmlComponent.sendEventToMATLAB('matlab_method_call_request', eventData);
-            console.log(`Sent MATLAB method call request: ${methodName} (ID: ${requestId})`);
+            console.log(`Sent MATLAB method call request: ${MethodName} (ID: ${RequestId})`);
         } catch (error) {
             // Clean up pending call
             this._pendingCalls.delete(requestId);
@@ -170,10 +191,10 @@ export class UIHTMLServiceLayer extends ServiceLayer {
             // Dispatch server error event
             this._eventManager.dispatchEvent(EventTypes.SERVER_ERROR, {
                 id: 'MATLAB_CALL_FAILED',
-                message: `Failed to send MATLAB method call: ${methodName}`,
+                message: `Failed to send MATLAB method call: ${method}`,
                 details: {
                     requestId,
-                    method: methodName,
+                    method: method,
                     error: error.message
                 }
             });

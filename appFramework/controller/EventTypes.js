@@ -135,13 +135,13 @@ export const EventTypes = Object.freeze({
     // MATLAB Method Call Request Event
     MATLAB_METHOD_CALL_REQUEST: {
       required: {
-        requestId: { type: 'string', description: 'Unique identifier for the request' },
-        method: { type: 'string', description: 'Method name to call' },
-        objectPath: { type: 'array', description: 'Path to target object or empty array for static methods' },
-        args: { type: 'object', description: 'Arguments for method call' }
+        RequestId: { type: 'string', description: 'Unique identifier for the request' },
+        MethodName: { type: 'string', description: 'Method name to call' },
+        ObjectPath: { type: 'array', description: 'Path to target object or empty array for static methods' },
+        Args: { type: 'object', description: 'Arguments for method call' }
       },
       optional: {
-        timeout: { type: 'number', description: 'Timeout in milliseconds' }
+        Timeout: { type: 'number', description: 'Timeout in milliseconds' }
       }
     }
   },
