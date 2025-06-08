@@ -1,53 +1,104 @@
-const { mkdtemp, rm } = require('fs/promises');
-const { join } = require('path');
-const { tmpdir } = require('os');
-const fs = require('fs');
-const path = require('path');
+/**
+ * Test utilities for the appFramework tests
+ */
 
 /**
- * Creates a temporary directory for testing
- * @returns {Promise<string>} Path to the created directory
+ * Helper to create a mock event object
+ * @param {string} type - Event type
+ * @param {Object} [data] - Event data
+ * @returns {CustomEvent}
  */
-async function createTempDir() {
-  return await mkdtemp(join(tmpdir(), 'app-framework-test-'));
+/**
+ * Test utilities for the appFramework tests
+ */
+
+/**
+ * Helper to create a mock event object
+ * @param {string} type - Event type
+ * @param {Object} [data] - Event data
+ * @returns {CustomEvent}
+ */
+export function createEvent(type, data = {}) {
+  return new CustomEvent(type, {
+    detail: data,
+    bubbles: true,
+    cancelable: true,
+  });
 }
 
 /**
- * Removes a directory and its contents
- * @param {string} dirPath - Path to the directory to remove
+ * Creates a mock DOM event for testing
+ * @param {string} type - Event type (e.g., 'click', 'input', 'change')
+ * @param {Object} [options] - Event options
+ * @returns {Object} Mock event object
  */
-async function cleanupTempDir(dirPath) {
-  try {
-    await rm(dirPath, { recursive: true, force: true });
-  } catch (err) {
-    console.warn(`Failed to clean up temp dir ${dirPath}:`, err);
+export function createMockEvent(type, options = {}) {
+  // Create a plain object instead of a real Event
+  const event = {
+    type,
+    bubbles: true,
+    cancelable: true,
+    target: options.target || null,
+    currentTarget: options.currentTarget || null,
+    preventDefault: options.preventDefault || jest.fn(),
+    stopPropagation: options.stopPropagation || jest.fn(),
+    stopImmediatePropagation: options.stopImmediatePropagation || jest.fn(),
+    ...options
+  };
+  
+  // For input/change events, add value/checked properties
+  if (event.target) {
+    event.target.value = event.target.value || '';
+    event.target.checked = event.target.checked || false;
   }
+  
+  return event;
 }
 
 /**
- * Loads test model definitions
- * @returns {Promise<Object>} Object containing model definitions
+ * Waits for all promises to resolve
+ * @returns {Promise<void>}
  */
-async function loadTestDefinitions() {
-  const readJson = (filePath) => {
-    try {
-      const fullPath = path.join(__dirname, filePath);
-      return JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-    } catch (err) {
-      console.error(`Error loading JSON file ${filePath}:`, err);
-      return null;
-    }
-  };
-
-  return {
-    BaseModel: readJson('./data-models/BaseModel.json'),
-    User: readJson('./data-models/User.json'),
-    Post: readJson('./data-models/Post.json')
-  };
+export function flushPromises() {
+  return new Promise(setImmediate);
 }
 
-module.exports = {
-  createTempDir,
-  cleanupTempDir,
-  loadTestDefinitions
-};
+/**
+ * Creates a mock implementation of a class with spies on all methods
+ * @param {Function} Class - The class to mock
+ * @param {Object} [overrides] - Method overrides
+ * @returns {Object} Mocked class instance with spies
+ */
+export function createMockInstance(Class, overrides = {}) {
+  const mock = {};
+  const prototype = Class.prototype;
+
+  // Get all property names including getters/setters
+  const propertyNames = [
+    ...Object.getOwnPropertyNames(prototype),
+    ...Object.getOwnPropertyNames(Class)
+  ];
+
+  // Create spies for all methods
+  propertyNames.forEach(prop => {
+    if (typeof prototype[prop] === 'function' && prop !== 'constructor') {
+      mock[prop] = jest.fn(overrides[prop] || (() => {}));
+    }
+  });
+
+  // Apply any overrides
+  Object.assign(mock, overrides);
+
+  return mock;
+}
+
+/**
+ * Creates a test DOM element with the given HTML
+ * @param {string} html - HTML string
+ * @returns {HTMLElement}
+ */
+export function createTestElement(html) {
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  return container.firstElementChild || container;
+}

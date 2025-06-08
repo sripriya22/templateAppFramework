@@ -7,9 +7,9 @@ module.exports = {
   },
   
   // Setup files - Use setupFiles to run before the test framework is installed
-  setupFiles: ['<rootDir>/appFramework/test/setup-globals.js'],
+  setupFiles: ['<rootDir>/appFramework/test/setup-globals.cjs'],
   // Use setupFilesAfterEnv to run after the test framework is installed
-  setupFilesAfterEnv: ['<rootDir>/appFramework/test/setup.js'],
+  setupFilesAfterEnv: ['<rootDir>/appFramework/test/setup.cjs'],
   
   // Test matching
   testMatch: ['**/appFramework/test/**/*.test.js'],
@@ -64,5 +64,12 @@ module.exports = {
   watchman: true,
   
   // Test timeout
-  testTimeout: 10000
+  testTimeout: 10000,
+  
+  // Enable ES modules support
+  extensionsToTreatAsEsm: ['.js'],
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+    ...module.exports.moduleNameMapper
+  }
 };

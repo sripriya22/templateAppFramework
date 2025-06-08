@@ -8,9 +8,10 @@
     "appGenerator"
   ],
   "scripts": {
-    "test": "npm run test --workspaces --if-present",
-    "test:watch": "npm run test:watch --workspaces --if-present",
-    "test:coverage": "npm run test:coverage --workspaces --if-present",
+    "test": "cd appFramework && npm test",
+    "test:watch": "cd appFramework && npm run test:watch",
+    "test:coverage": "cd appFramework && npm run test:coverage",
+    "test:ci": "cd appFramework && NODE_OPTIONS=--experimental-vm-modules jest --ci --runInBand --coverage --config ../jest.config.js",
     "clean": "rm -rf node_modules && npm run clean --workspaces --if-present",
     "build": "npm run build --workspaces --if-present"
   },

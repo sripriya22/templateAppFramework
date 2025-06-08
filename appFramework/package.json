@@ -10,9 +10,9 @@
     "src"
   ],
   "scripts": {
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ../../jest.config.js",
-    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --config ../../jest.config.js",
-    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config ../../jest.config.js",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest --config ../jest.config.js",
+    "test:watch": "NODE_OPTIONS=--experimental-vm-modules jest --watch --config ../jest.config.js",
+    "test:coverage": "NODE_OPTIONS=--experimental-vm-modules jest --coverage --config ../jest.config.js",
     "clean": "rimraf dist",
     "build": "npm run clean && babel src --out-dir dist --extensions '.js' --source-maps",
     "prepublishOnly": "npm run build"
@@ -22,6 +22,7 @@
   },
   "devDependencies": {
     "@babel/cli": "^7.27.0",
+    "jsdom": "26.1.0",
     "rimraf": "^5.0.5"
   },
   "keywords": [

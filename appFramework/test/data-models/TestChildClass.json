@@ -1,0 +1,16 @@
+{
+  "ClassName": "TestChildClass",
+  "Extends": "TestBaseClass",
+  "Description": "Child class for testing inheritance",
+  "Properties": {
+    "extraField": {
+      "Type": "number",
+      "Required": true,
+      "Description": "Test field specific to child class"
+    },
+    "optionalField": {
+      "Type": "boolean",
+      "Description": "Optional boolean field"
+    }
+  }
+}

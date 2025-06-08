@@ -1,0 +1,20 @@
+{
+  "ClassName": "TestBaseClass",
+  "Description": "Base class for testing",
+  "Properties": {
+    "id": {
+      "Type": "string",
+      "Required": true,
+      "Description": "Unique identifier"
+    },
+    "name": {
+      "Type": "string",
+      "Required": true,
+      "Description": "Display name"
+    },
+    "description": {
+      "Type": "string",
+      "Description": "Optional description"
+    }
+  }
+}
