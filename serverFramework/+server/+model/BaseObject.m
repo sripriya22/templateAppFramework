@@ -74,59 +74,6 @@ classdef (Abstract) BaseObject < handle
             end
         end
         
-        function data = toData(obj)
-            % TODATA Convert object to data-only structure
-            %   Returns a struct containing only public properties. For properties that
-            %   are references to other objects not owned by this object, returns the UID 
-            %   instead of the object to prevent recursive references.
-            %
-            %   Returns:
-            %       struct: Data-only representation of the object
-            
-            % Get all public properties
-            props = properties(obj);
-            data = struct();
-            
-            for i = 1:numel(props)
-                prop = props{i};
-                value = obj.(prop);
-                
-                % Handle different property types
-                if isa(value, 'BaseObject')
-                    % If it's a BaseObject, use its UID
-                    data.(prop) = struct('Uid', value.Uid);
-                elseif isobject(value) && ismethod(value, 'toData')
-                    % Object with toData method
-                    data.(prop) = value.toData();
-                elseif isvector(value) && ~ischar(value) && ~isstring(value)
-                    % Handle array types
-                    if isempty(value)
-                        data.(prop) = value;
-                    elseif all(arrayfun(@(x) isa(x, 'BaseObject'), value))
-                        % Array of BaseObjects
-                        dataArray = cell(size(value));
-                        for j = 1:numel(value)
-                            dataArray{j} = struct('Uid', value(j).Uid);
-                        end
-                        data.(prop) = dataArray;
-                    elseif ~isempty(value) && all(arrayfun(@(x) isobject(x) && ismethod(x, 'toData'), value))
-                        % Array of objects with toData method
-                        dataArray = cell(size(value));
-                        for j = 1:numel(value)
-                            dataArray{j} = value(j).toData();
-                        end
-                        data.(prop) = dataArray;
-                    else
-                        % Regular array
-                        data.(prop) = value;
-                    end
-                else
-                    % Regular value
-                    data.(prop) = value;
-                end
-            end
-        end
-        
         function obj = initializeFromData(obj, data, rootModel)
             % INITIALIZEFROMDATA Initialize this object from a data struct
             %   This method populates properties from a data struct. It can be 
@@ -304,6 +251,64 @@ classdef (Abstract) BaseObject < handle
             
             % If we get here, just do direct assignment
             obj.(propName) = propValue;
+        end
+    end
+
+    methods (Access=public)
+        function data = toData(obj)
+            % TODATA Convert object to data-only structure
+            %   Returns a struct containing only public properties. For properties that
+            %   are references to other objects not owned by this object, returns the UID 
+            %   instead of the object to prevent recursive references.
+            %
+            %   Returns:
+            %       struct: Data-only representation of the object
+            
+            % Get all public properties
+            props = properties(obj);
+            data = struct();
+            
+            for i = 1:numel(props)
+                prop = props{i};
+                value = obj.(prop);
+                
+                % Handle different property types
+                
+                % First check for vectors/arrays (must come before scalar object checks)
+                if isvector(value) && ~ischar(value) && ~isstring(value) && numel(value) > 1
+                    % Handle array types
+                    if isempty(value)
+                        data.(prop) = value;
+                    elseif all(arrayfun(@(x) isa(x, 'server.model.BaseObject'), value))
+                        % Array of BaseObjects - get full representation
+                        dataArray = cell(1, numel(value));
+                        for j = 1:numel(value)
+                            dataArray{j} = value(j).toData();
+                        end
+                        data.(prop) = [dataArray{:}];
+                    elseif all(arrayfun(@(x) isobject(x) && ismethod(x, 'toData'), value))
+                        % Array of objects with toData method
+                        dataArray = cell(1, numel(value));
+                        for j = 1:numel(value)
+                            dataArray{j} = value(j).toData();
+                        end
+                        data.(prop) = [dataArray{:}];
+                    else
+                        % Regular array
+                        data.(prop) = value;
+                    end
+                % Then handle scalar objects
+                elseif isa(value, 'server.model.BaseObject')
+                    % If it's a BaseObject, get full representation
+                    data.(prop) = value.toData();
+                elseif isobject(value) && ismethod(value, 'toData')
+                    % Object with toData method
+                    data.(prop) = value.toData();
+                else
+                    % Regular value
+                    data.(prop) = value;
+                end
+            end
         end
     end
     
