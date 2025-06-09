@@ -28,7 +28,8 @@ const FILES_TO_COPY = [
 const DIRS_TO_CREATE = [
   'data-model',
   'resources',
-  'view/config'
+  'view/config',
+  'server/model'
 ];
 
 // Create a simple read stream wrapper that handles errors better
@@ -118,11 +119,35 @@ async function getModelClassNames(dataModelDir) {
 // Removed older version of generateModelPanelConfig function to avoid duplication
 
 /**
+ * Finds the root class in model definitions
+ * @param {string} modelDefsDir - Path to model definitions directory
+ * @returns {Promise<string>} - Name of the root class
+ */
+async function findRootClass(modelDefsDir) {
+  const files = fs.readdirSync(modelDefsDir);
+  
+  for (const file of files) {
+    if (file.endsWith('.json')) {
+      try {
+        const content = fs.readFileSync(path.join(modelDefsDir, file), 'utf8');
+        const def = JSON.parse(content);
+        if (def.IsRoot) {
+          return def.ClassName;
+        }
+      } catch (err) {
+        console.warn(`Warning: Could not parse model file ${file}:`, err);
+      }
+    }
+  }
+  
+  throw new Error('No root class found in model definitions. Add "IsRoot: true" to one of the model definitions.');
+}
+
+/**
  * Main function to create a new app
  * @param {string} targetPath - Target directory for the app
  * @param {string} dataFile - Path to data file to use
  * @param {object} options - Options for app creation
- * @param {string} options.rootClass - Root class name
  * @param {string} options.title - App title
  * @param {boolean} options.force - Whether to force overwriting
  * @param {string} options.modelDefsDir - Path to model definitions directory
@@ -138,15 +163,23 @@ async function createApp(targetPath, dataFile, options = {}) {
   if (!dataFile) {
     throw new Error('Data file is required');
   }
-  if (!options.rootClass) {
-    throw new Error('Root class name is required');
+  if (!options.modelDefsDir) {
+    throw new Error('Model definitions directory is required');
   }
   
   // Set up basic variables
   const appName = basename(targetPath);
-  const rootClassName = options.rootClass;
   const appTitle = options.title || `${appName} Application`;
   const modelDefsDir = options.modelDefsDir;
+  
+  if (!modelDefsDir) {
+    throw new Error('Model definitions directory (--model-defs-dir) is required');
+  }
+  
+  // Find the root class from model definitions
+  const rootClass = await findRootClass(modelDefsDir);
+  console.log(`Found root class: ${rootClass}`);
+  
   let testDataPath = null;
 
   try {
@@ -159,9 +192,14 @@ async function createApp(targetPath, dataFile, options = {}) {
     // Step 1: Copy the data file (required)
     testDataPath = await copyDataFile(dataFile, targetPath);
     
-    // Step 2: Copy model definitions if provided
+    // Step 2: Copy model definitions to the server/model/+appName directory
     if (options.modelDefsDir) {
-      await copyModelDefinitions(options.modelDefsDir, targetPath, rootClassName);
+      const serverModelDir = join(targetPath, 'server', 'model');
+      const appPackageDir = join(serverModelDir, `+${appName}`);
+      await mkdir(appPackageDir, { recursive: true });
+      
+      // Update model definitions to use package-qualified class names
+      await copyModelDefinitions(options.modelDefsDir, appPackageDir, appName);
     } else {
       console.warn('Warning: No model definitions directory specified. Using auto-generated model definitions.');
       // App will use the auto-generated model definition from the data file
@@ -175,7 +213,7 @@ async function createApp(targetPath, dataFile, options = {}) {
     }
     
     // Step 4: Copy all template files
-    await copyAllTemplateFiles(TEMPLATES_DIR, targetPath, appName, appTitle, rootClassName, modelClassNames, testDataPath);
+    await copyAllTemplateFiles(TEMPLATES_DIR, targetPath, appName, appTitle, modelClassNames, testDataPath);
     
     // Step 5: Generate ModelPanelConfig.json dynamically from model definitions
     console.log('Generating ModelPanelConfig.json...');
@@ -187,7 +225,7 @@ async function createApp(targetPath, dataFile, options = {}) {
       const sourceModelDir = options.modelDefsDir || dataModelDir;
       
       // Generate the model panel configuration
-      const config = await generateModelPanelConfig(sourceModelDir, rootClassName);
+      const config = await generateModelPanelConfig(sourceModelDir, appName);
       
       // Write the configuration to file
       const configPath = join(modelPanelConfigDir, 'ModelPanelConfig.json');
@@ -210,7 +248,7 @@ async function createApp(targetPath, dataFile, options = {}) {
   }
   
   // Function to copy a file with directory creation
-  async function copyWithDirs(source, dest, appName, rootClassName, appTitle, appFolderPath) {
+  async function copyWithDirs(source, dest, appName, appTitle, appFolderPath) {
     try {
       // Create destination directory if it doesn't exist
       const destDir = dirname(dest);
@@ -228,7 +266,7 @@ async function createApp(targetPath, dataFile, options = {}) {
         const modelClassNames = await getModelClassNames(modelClassDir);
         const formattedClassNames = modelClassNames.length > 0 
           ? modelClassNames.map(name => `'${name}'`).join(',\n      ')
-          : `'${rootClassName}'`; // Default to rootClassName if no models found
+          : `'${appName}'`; // Default to app name if no models found
           
         // Get any test data paths
         const resourcesDir = join(targetPath, 'resources');
@@ -249,7 +287,6 @@ async function createApp(targetPath, dataFile, options = {}) {
         // Apply replacements for the template
         content = content
           .replace(/{{APP_NAME}}/g, appName)
-          .replace(/{{ROOT_CLASS_NAME}}/g, rootClassName)
           .replace(/{{APP_TITLE}}/g, appTitle)
           .replace(/{{APP_FOLDER_PATH}}/g, appFolderPath)
           .replace(/{{MODEL_CLASS_NAMES}}/g, formattedClassNames)
@@ -319,10 +356,9 @@ async function copyDataFile(dataFile, targetPath) {
  * Copy model definition files from a source directory
  * @param {string} modelDefsDir - Path to directory containing model definition files
  * @param {string} targetPath - Path to app directory
- * @param {string} rootClassName - Name of root class to ensure is copied
  * @returns {Promise<void>}
  */
-async function copyModelDefinitions(modelDefsDir, targetPath, rootClassName) {
+async function copyModelDefinitions(modelDefsDir, targetPath, appName) {
   // Validate inputs
   if (!modelDefsDir) {
     throw new Error('Model definitions directory is required');
@@ -333,8 +369,7 @@ async function copyModelDefinitions(modelDefsDir, targetPath, rootClassName) {
   }
   
   // Create target directory
-  const targetDir = join(targetPath, 'data-model');
-  await mkdir(targetDir, { recursive: true });
+  await mkdir(targetPath, { recursive: true });
   
   // Get list of JSON files in the source directory
   const files = await fs.promises.readdir(modelDefsDir);
@@ -344,36 +379,12 @@ async function copyModelDefinitions(modelDefsDir, targetPath, rootClassName) {
     throw new Error(`No JSON model definition files found in ${modelDefsDir}`);
   }
   
-  // Check for root class definition
-  let foundRootClass = false;
-  for (const file of jsonFiles) {
-    try {
-      const content = await fs.promises.readFile(join(modelDefsDir, file), 'utf8');
-      try {
-        const def = JSON.parse(content);
-        if (def.ClassName === rootClassName) {
-          foundRootClass = true;
-          console.log(`  ✓ Found root class definition: ${rootClassName}`);
-          break;
-        }
-      } catch (parseErr) {
-        console.warn(`Warning: Could not parse JSON in ${file}: ${parseErr.message}`);
-      }
-    } catch (readErr) {
-      console.warn(`Warning: Could not read file ${file}: ${readErr.message}`);
-    }
-  }
-  
-  if (!foundRootClass && rootClassName) {
-    throw new Error(`Root class definition for ${rootClassName} not found in model definitions directory`);
-  }
-  
   // Copy each JSON file
   let copiedCount = 0;
   for (const file of jsonFiles) {
     try {
       const sourcePath = join(modelDefsDir, file);
-      const destPath = join(targetDir, file);
+      const destPath = join(targetPath, file);
       
       // Read source file
       const content = await readFile(sourcePath, 'utf8');
@@ -381,9 +392,25 @@ async function copyModelDefinitions(modelDefsDir, targetPath, rootClassName) {
       // Parse to validate JSON
       JSON.parse(content);
       
-      // Write to destination
-      await writeFile(destPath, content, 'utf8');
-      console.log(`  ✓ Copied model definition: data-model/${file}`);
+      // Update property types to be package-qualified
+      const def = JSON.parse(content);
+      if (def.Properties) {
+        for (const propName in def.Properties) {
+          const prop = def.Properties[propName];
+          if (!prop.IsPrimitive && prop.Type && !prop.Type.startsWith(appName + '.')) {
+            prop.Type = `${appName}.${prop.Type}`;
+          }
+        }
+      }
+      
+      // Update SuperClass to be package-qualified if it exists and isn't BaseObject or RootModel
+      if (def.SuperClass && !['BaseObject', 'RootModel', `server.model.BaseObject`, `server.model.RootModel`].includes(def.SuperClass)) {
+        def.SuperClass = `${appName}.${def.SuperClass}`;
+      }
+      
+      // Write the updated definition to the target directory
+      await writeFile(destPath, JSON.stringify(def, null, 2));
+      console.log(`  ✓ Copied model definition: ${destPath}`);
       copiedCount++;
     } catch (err) {
       console.warn(`Warning: Failed to copy ${file}: ${err.message}`);
@@ -399,12 +426,11 @@ async function copyModelDefinitions(modelDefsDir, targetPath, rootClassName) {
  * @param {string} targetPath - Path to target app directory
  * @param {string} appName - Name of the app
  * @param {string} appTitle - Title of the app
- * @param {string} rootClassName - Name of root class
  * @param {string[]} modelClassNames - Array of all model class names
  * @param {string} testDataPath - Relative path to test data file
  * @returns {Promise<void>}
  */
-async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle, rootClassName, modelClassNames, testDataPath) {
+async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle, modelClassNames, testDataPath) {
   // Validate inputs
   if (!templatesDir || !targetPath || !appName) {
     throw new Error('Missing required parameters for copying template files');
@@ -435,7 +461,6 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
     content = content
       .replace(/\{\{APP_NAME\}\}/g, appName)
       .replace(/\{\{APP_TITLE\}\}/g, appTitle || appName)
-      .replace(/\{\{ROOT_CLASS_NAME\}\}/g, rootClassName || 'Configuration')
       .replace(/\{\{APP_FOLDER_PATH\}\}/g, appName) // Fix app folder path for model loading
       .replace(/\{\{TEST_DATA_PATH\}\}/g, testDataPath || '')
       // Ensure model class names are output as a flat array, not nested
@@ -494,13 +519,13 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
 /**
  * Generates a valid ModelPanelConfig.json from the root model class
  * @param {string} modelDefsDir - Path to model definitions directory
- * @param {string} rootClassName - Name of root model class
+ * @param {string} appName - Name of the app
  * @returns {Promise<object>} Generated ModelPanel configuration
  */
-async function generateModelPanelConfig(modelDefsDir, rootClassName) {
+async function generateModelPanelConfig(modelDefsDir, appName) {
   // Validate inputs
-  if (!modelDefsDir || !rootClassName) {
-    throw new Error('Model definitions directory and root class name are required');
+  if (!modelDefsDir) {
+    throw new Error('Model definitions directory is required');
   }
   
   if (!existsSync(modelDefsDir)) {
@@ -516,7 +541,7 @@ async function generateModelPanelConfig(modelDefsDir, rootClassName) {
     try {
       const content = await readFile(join(modelDefsDir, file), 'utf8');
       const def = JSON.parse(content);
-      if (def.ClassName === rootClassName) {
+      if (def.IsRoot) {
         rootClassFile = file;
         break;
       }
@@ -526,7 +551,7 @@ async function generateModelPanelConfig(modelDefsDir, rootClassName) {
   }
   
   if (!rootClassFile) {
-    throw new Error(`Root class definition for ${rootClassName} not found in model definitions directory`);
+    throw new Error(`Root class definition not found in model definitions directory`);
   }
   
   // Read root class definition
@@ -536,8 +561,8 @@ async function generateModelPanelConfig(modelDefsDir, rootClassName) {
   // Generate configuration that matches the working app format
   const config = {
     "ConfigName": "ModelPanelConfig",
-    "Description": `Configuration for ${rootClassName}`,
-    "ModelClass": rootClassName,
+    "Description": `Configuration for ${appName}.${rootClassDef.ClassName}`,
+    "ModelClass": `${appName}.${rootClassDef.ClassName}`,
     "PropertyGroups": [],
     "ArrayConfigs": []
   };

@@ -6,7 +6,10 @@ classdef AbstractController < handle
     
     properties (Access=private)
         UIHTML matlab.ui.control.HTML {mustBeScalarOrEmpty} = matlab.ui.control.HTML.empty
-        RootModel server.model.BaseObject {mustBeScalarOrEmpty} = server.model.BaseObject.empty
+    end
+    
+    properties (Access=protected)
+        RootModel server.model.RootModel {mustBeScalarOrEmpty} = server.model.RootModel.empty
     end
     
     methods
@@ -52,7 +55,7 @@ classdef AbstractController < handle
                 obj (1,1)
             end
 
-            obj.RootModel = obj.constructNewRootModel(obj);
+            obj.RootModel = obj.constructNewRootModel(obj, struct);
             
             obj.RootModel = rootModel;
 
@@ -69,16 +72,15 @@ classdef AbstractController < handle
                 error("Missing required input field RootModelData.")
             end
 
-            obj.RootModel = obj.constructNewRootModel(obj, inputs.RootModelData);
+            obj.RootModel = obj.constructNewRootModel(inputs.RootModelData);
             
             % No returned results
             results = struct;
-        end
-        
+        end        
     end
     
     methods (Abstract, Access=protected)
-        rootModel = constructNewRootModel(obj)
+        rootModel = constructNewRootModel(obj, rootModelData)
     end
 
     methods (Access=protected)
@@ -188,6 +190,12 @@ classdef AbstractController < handle
             
             % For now, return empty to indicate not found
             obj = [];
+        end
+    end    
+
+    methods(Static)
+        function testFcn()            
+            disp("Called testFcn");
         end
     end
 end

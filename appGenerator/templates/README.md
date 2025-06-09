@@ -30,28 +30,60 @@ Please proceed with the setup steps in the README. If you encounter any issues, 
 Please analyze the example object file and create appropriate data model definitions following this format:
 
 ```json
+// Root class example (only one per application)
 {
-    "ClassName": "ClassName",
-    "SuperClass": "AbstractModelObject",
-    "Description": "Description of the class",
+    "ClassName": "Configuration",
+    "IsRoot": true,
+    "Description": "Root configuration class",
     "Properties": {
-        "PropertyName": {
-            "Type": "String",
+        "Name": {
+            "Type": "string",
             "IsPrimitive": true,
             "IsArray": false,
-            "DefaultValue": "",
-            "Description": "Description of the property"
-        },
-        "Items": {
-            "Type": "ItemType",
-            "IsPrimitive": false,
-            "IsArray": true,
-            "DefaultValue": [],
-            "Description": "Array of items"
+            "DefaultValue": "My Configuration",
+            "Description": "Name of the configuration"
         }
     }
 }
+
+// Non-root class example (most of your classes will be like this)
+{
+    "ClassName": "ItemType",
+    "Description": "A non-root model class",
+    "Properties": {
+        "Id": {
+            "Type": "string",
+            "IsPrimitive": true,
+            "IsArray": false,
+            "Description": "Unique identifier"
+        },
+        "Items": {
+            "Type": "SubItemType",
+            "IsPrimitive": false,
+            "IsArray": true,
+            "DefaultValue": [],
+            "Description": "Array of sub-items"
+        }
+    }
+}
+
+// Class with custom superclass (must extend BaseObject or RootModel)
+{
+    "ClassName": "CustomClass",
+    "SuperClass": "BaseCustomClass",  // Must extend BaseObject or RootModel
+    "Description": "A class with custom superclass",
+    "Properties": {
+        // ... properties ...
+    }
+}
 ```
+
+### Root Class Rules:
+- Only one class in your model definitions should have `"IsRoot": true`
+- The root class will be used as the main entry point for your application
+- If no class is marked as root, an error will be thrown during code generation
+- The root class will automatically inherit from `RootModel`, which extends `BaseObject`
+- Non-root classes will inherit from `BaseObject` by default unless a different superclass is specified
 
 Show me the complete model definitions I should use, and list all the class names that will be needed.
 ```
