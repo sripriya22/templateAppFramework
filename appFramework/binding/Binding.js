@@ -51,7 +51,6 @@ export class Binding {
     // Initialize the binding
     this._setupBindings();
     
-    console.log(`Binding created for ${this.path} with element ${this.element.tagName}#${this.element.id || 'no-id'}, listening for ${this.events.view} events`);
   }
   
   /**
@@ -59,9 +58,6 @@ export class Binding {
    * @private
    */
   _setupBindings() {
-    console.log(`Setting up binding for ${this.path} with view event: ${this.events.view}`);
-    console.log(`Element: ${this.element.tagName}, type: ${this.element.type || 'n/a'}, id: ${this.element.id || 'no-id'}`);
-    
     // Bind the event handlers to this instance and store references for cleanup
     // This ensures 'this' refers to the Binding instance inside the handler
     this._boundHandleViewChange = this._handleViewChange.bind(this);
@@ -70,8 +66,6 @@ export class Binding {
     try {
       // Add the event listener directly - no removeEventListener to avoid registration issues
       this.element.addEventListener(this.events.view, this._boundHandleViewChange);
-      console.log(`Added view event listener for ${this.events.view} event`);
-      
       // Store a reference to the binding on the element for debugging
       this.element.__binding = this;
     } catch (error) {
@@ -88,11 +82,8 @@ export class Binding {
     // If we're currently updating from a model change, don't propagate this view change
     // This prevents infinite update loops where model changes trigger view changes which trigger model changes
     if (this._isUpdatingFromModel) {
-      console.log(`Ignoring view change event during model update for ${this.path}`);
       return;
     }
-    
-    console.log(`VIEW CHANGE EVENT: ${this.path}, event type: ${event.type}`);
     
     // Get the value from the element based on the attribute
     let value;
@@ -194,11 +185,8 @@ export class Binding {
    * @private
    */
   _determineViewEvent(options) {
-    console.log('_determineViewEvent called for element:', options.element.tagName, options.element.type || 'n/a', 'attribute:', options.attribute || 'value');
-    
     // If explicitly specified in options, use that
     if (options.events && options.events.view) {
-      console.log('Using explicitly specified event:', options.events.view);
       return options.events.view;
     }
     

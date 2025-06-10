@@ -66,7 +66,7 @@ classdef AbstractController < handle
         end
     end
 
-    methods (Access={?ConfigController, ?testConfigController})
+    methods (Access={?server.controller.AbstractController, ?testConfigController})
         function dispatch(obj, ~, event)
             eventData = event.HTMLEventData;
             reply = rmfield(eventData, "Args");
