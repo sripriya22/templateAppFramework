@@ -687,7 +687,6 @@ export class ModelPanel extends BaseComponent {
                         if (model) {
                             // Create path to this array item property
                             const itemPath = `${arrayConfig.PropertyPath}[${index}].${propName}`;
-                            console.log(`Creating binding for array item: ${itemPath}`);
                             
                             // Determine the appropriate attribute based on widget type
                             let attribute = 'value';
@@ -1012,7 +1011,6 @@ export class ModelPanel extends BaseComponent {
             if (app) {
                 const model = app.getModel();
                 if (model) {
-                    console.log(`Creating binding for field: ${propertyPath}`);
                     
                     // Create binding for this input
                     this.createBinding({
