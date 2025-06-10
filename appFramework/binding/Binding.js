@@ -118,13 +118,13 @@ export class Binding {
    */
   handleModelChange(event) {
     // Only update if the changed property matches our path
-    if (event.path === this.path) {
+    if (event.Path === this.path) {
       try {
         // Set the flag to prevent view change events from triggering model updates
         this._isUpdatingFromModel = true;
         
         // Update the view with the new model value from the event
-        this._updateViewFromModel(event.value);
+        this._updateViewFromModel(event.Value);
       } finally {
         // Always reset the flag, even if an error occurs
         this._isUpdatingFromModel = false;

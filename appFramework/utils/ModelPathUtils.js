@@ -34,6 +34,9 @@ export class ModelPathUtils {
   static parsePath(path) {
     if (!path) return {};
     
+    // Normalize path by removing RootModel prefix if present
+    path = this._normalizePath(path);
+    
     const parts = path.split('.');
     
     if (parts.length === 1) {
@@ -66,6 +69,24 @@ export class ModelPathUtils {
   }
   
   /**
+   * Normalize a path by removing RootModel prefix if present
+   * @param {string} path - The path to normalize
+   * @returns {string} The normalized path
+   * @private
+   */
+  static _normalizePath(path) {
+    // TODO: We need to standardize paths across the application
+    // For now, just remove RootModel prefix if present
+    if (!path) return path;
+    
+    if (path.startsWith('RootModel.')) {
+      return path.substring('RootModel.'.length);
+    }
+    
+    return path;
+  }
+
+  /**
    * Get a value from an object using a path
    * @param {Object} obj - The object to get the value from
    * @param {string} path - The path to the value
@@ -73,6 +94,9 @@ export class ModelPathUtils {
    */
   static getValueFromPath(obj, path) {
     if (!obj || !path) return undefined;
+    
+    // Normalize path by removing RootModel prefix if present
+    path = this._normalizePath(path);
     
     // Handle array notation like Parameters[0].Value
     // Convert to dot notation: Parameters.0.Value
@@ -112,6 +136,9 @@ export class ModelPathUtils {
    */
   static setValueAtPath(obj, path, value) {
     if (!obj || !path) return false;
+    
+    // Normalize path by removing RootModel prefix if present
+    path = this._normalizePath(path);
     
     // Handle array notation like Parameters[0].Value
     // Convert to dot notation: Parameters.0.Value
@@ -169,6 +196,9 @@ export class ModelPathUtils {
    */
   static getUidFromPath(rootInstance, path) {
     if (!rootInstance || !path) return null;
+    
+    // Normalize path by removing RootModel prefix if present
+    path = this._normalizePath(path);
     
     const { collectionName, index } = this.parsePath(path);
     

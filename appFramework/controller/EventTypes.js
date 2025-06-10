@@ -20,6 +20,10 @@ export const EventTypes = Object.freeze({
   CLIENT_WARNING: 'client_warning',
   SERVER_WARNING: 'server_warning',
   MATLAB_METHOD_CALL_REQUEST: 'matlab_method_call_request',
+  SERVER_NOTIFICATION: 'server_notification',
+
+  // Server events
+  SERVER_MODEL_PROPERTY_UPDATED: 'server_model_property_updated',
   
   /**
    * Event definitions map
@@ -66,13 +70,14 @@ export const EventTypes = Object.freeze({
     // Model-to-View Property Changed Event (when model updates itself)
     MODEL_TO_VIEW_PROPERTY_CHANGED: {
       required: {
-        path: { type: 'string', description: 'The path to the property that changed' },
-        value: { type: 'any', description: 'The new value of the property' }
+        Path: { type: 'string', description: 'The path to the property that changed' },
+        Property: { type: 'string', description: 'The name of the property that changed' },
+        Value: { type: 'any', description: 'The new value of the property' }
       },
       optional: {
-        oldValue: { type: 'any', description: 'The previous value of the property' },
-        model: { type: 'object', description: 'The model object that contains the property' },
-        source: { type: 'string', description: 'The source of the change (e.g., "api", "calculation")' }
+        OldValue: { type: 'any', description: 'The previous value of the property' },
+        Model: { type: 'object', description: 'The model object that contains the property' },
+        Source: { type: 'string', description: 'The source of the change (e.g., "api", "calculation")' }
       }
     },
     
@@ -135,13 +140,36 @@ export const EventTypes = Object.freeze({
     // MATLAB Method Call Request Event
     MATLAB_METHOD_CALL_REQUEST: {
       required: {
-        RequestId: { type: 'string', description: 'Unique identifier for the request' },
         MethodName: { type: 'string', description: 'Method name to call' },
-        ObjectPath: { type: 'array', description: 'Path to target object or empty array for static methods' },
-        Args: { type: 'object', description: 'Arguments for method call' }
+        ObjectPath: { type: 'string', description: 'Path to target object or empty array for static methods' },
       },
       optional: {
-        Timeout: { type: 'number', description: 'Timeout in milliseconds' }
+        Args: { type: 'object', description: 'Arguments for method call' },
+        Callback: { type: 'function', description: 'Function to call when the response is received' },
+        ErrorCallback: { type: 'function', description: 'Function to call when an error occurs' }
+      }
+    },
+    
+    // Server Model Property Updated Event
+    SERVER_MODEL_PROPERTY_UPDATED: {
+      required: {
+        ObjectPath: { type: 'string', description: 'Path to the object containing the property' },
+        PropertyName: { type: 'string', description: 'Name of the property that changed' },
+        Value: { type: 'any', description: 'New value of the property' }
+      },
+      optional: {
+        Source: { type: 'string', description: 'Source of the property change' }
+      }
+    },
+    
+    // Server Notification Event
+    SERVER_NOTIFICATION: {
+      required: {
+        EventID: { type: 'string', description: 'The type of event being notified' },
+        EventData: { type: 'object', description: 'The data associated with the event' }
+      },
+      optional: {
+        Source: { type: 'string', description: 'Source of the notification' }
       }
     }
   },

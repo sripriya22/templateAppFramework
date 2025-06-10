@@ -212,8 +212,9 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
         content{end+1} = '    %';
     end
 
-    % Properties section
-    content{end+1} = '    properties';
+    % Properties section - all properties are SetObservable by default
+    % to enable property change notifications
+    content{end+1} = '    properties (SetObservable)';
 
     % Add properties from JSON
     if isfield(jsonData, 'Properties')

@@ -491,22 +491,63 @@ export class AbstractApp {
   }
 
   /**
-   * Load test data when not connected to server
-   * @private
+   * Load and apply test data to the application
+   * Sends MATLAB_METHOD_CALL_REQUEST if connected to MATLAB, otherwise
+   * dispatches SERVER_MODEL_UPDATED event directly with the loaded data
+   * @returns {Promise<void>}
    */
   async loadTestData() {
     try {
       // Use the abstract method to load test data
       const testData = await this.loadTestDataJson();
       
-      // Dispatch server model updated event - ClientModel will handle this and dispatch CLIENT_MODEL_UPDATED
-      this.dispatchClientEvent(
-        EventTypes.SERVER_MODEL_UPDATED,
-        { 
-          Data: testData
-        }
-      );
-      console.log('Dispatched SERVER_MODEL_UPDATED event with test data');
+      // Check if we're connected to MATLAB
+      if (this.isMatlabEnvironment() && this._serviceLayer) {
+        console.log('MATLAB environment detected, sending setRootModel request to server');
+        
+        // Define success callback
+        const successCallback = (response) => {
+          console.log('Server successfully set root model with test data:', response);
+          // No need to dispatch SERVER_MODEL_UPDATED as the server should broadcast it
+        };
+        
+        // Define error callback
+        const errorCallback = (error) => {
+          console.error('Error setting root model on server:', error);
+          this.dispatchClientEvent(
+            EventTypes.CLIENT_ERROR,
+            {
+              ID: 'set-root-model-failed',
+              Message: 'Failed to set root model on server',
+              Error: error.message
+            },
+            'test-data-loader'
+          );
+        };
+        
+        // Send MATLAB method call request to set the root model on the server
+        this._eventManager.dispatchEvent(EventTypes.MATLAB_METHOD_CALL_REQUEST, {
+          MethodName: 'setRootModel',
+          ObjectPath: '',
+          Args: {
+            RootModelData: testData
+          },
+          Callback: successCallback,
+          ErrorCallback: errorCallback
+        });
+      } else {
+        // If not connected to MATLAB, mock the server event directly
+        console.log('No MATLAB connection, mocking SERVER_MODEL_UPDATED event');
+        
+        // Dispatch server model updated event - ClientModel will handle this and dispatch CLIENT_MODEL_UPDATED
+        this.dispatchClientEvent(
+          EventTypes.SERVER_MODEL_UPDATED,
+          { 
+            Data: testData
+          }
+        );
+        console.log('Dispatched SERVER_MODEL_UPDATED event with test data');
+      }
     } catch (error) {
       console.error('Error loading test data:', error);
       this.dispatchClientEvent(

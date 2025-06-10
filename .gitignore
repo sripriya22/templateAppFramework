@@ -86,3 +86,6 @@ testLoadingAndPaths/
 
 # Prompt logs
 promptLog*
+
+# asv files
+**/*.asv

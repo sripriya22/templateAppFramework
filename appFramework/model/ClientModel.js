@@ -2,6 +2,7 @@
 import { ModelClassDefinitionManager } from './ModelClassDefinitionManager.js';
 import { EventListener } from '../controller/EventListener.js';
 import { EventTypes } from '../controller/EventTypes.js';
+import { ModelPathUtils } from '../utils/ModelPathUtils.js';
 
 /**
  * Client-side model that manages application data and state
@@ -299,11 +300,104 @@ export class ClientModel extends EventListener {
   }
 
   /**
-   * Get the list of event types this model is interested in
-   * @returns {string[]} Array of event type strings
+   * Get the events this component subscribes to
+   * @returns {Object} Map of event types to handler methods
    */
   getSubscribedEvents() {
-    return [EventTypes.SERVER_MODEL_UPDATED];
+    return [
+      EventTypes.SERVER_MODEL_UPDATED,
+      EventTypes.SERVER_MODEL_PROPERTY_UPDATED,
+      EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED
+    ];
+  }
+  
+  /**
+   * Handle property updates from the server
+   * @param {Object} eventData - The event data containing the property update
+   * @param {string} eventData.ObjectPath - The path to the object containing the property
+   * @param {string} eventData.PropertyName - The name of the property that changed
+   * @param {any} eventData.Value - The new value of the property
+   */
+  handle_server_model_property_updated(eventData) {
+    try {
+      // Extract data using PascalCase field names from server
+      const { ObjectPath, PropertyName, Value, Source } = eventData;
+      
+      if (!ObjectPath || !PropertyName) {
+        console.error('Invalid property update event - missing ObjectPath or PropertyName:', eventData);
+        return;
+      }
+      
+      // Construct the full path by combining object path and property name
+      //TODO: clean up path const fullPath = ObjectPath ? `${ObjectPath}.${PropertyName}` : PropertyName;
+      const fullPath = ObjectPath;
+      
+      // Get the root instance from the client model
+      const rootInstance = this.getRootInstance();
+      if (!rootInstance) {
+        console.warn('Cannot update property: No model loaded');
+        return;
+      }
+      
+      // Get the current value for comparison
+      const oldValue = ModelPathUtils.getValueFromPath(rootInstance, fullPath);
+      
+      // Check if this is confirming a pending change from this client
+      if (this._pendingChanges.has(fullPath)) {
+        // This is a confirmation of a client-initiated change - mark it confirmed
+        this.confirmPendingChange(fullPath);
+        
+        // If the value matches what we already have, no need to update the model
+        if (JSON.stringify(oldValue) === JSON.stringify(Value)) {
+          console.debug(`Server confirmed change for ${fullPath}, value already matches`);
+          return;
+        }
+      }
+      
+      // Update the property in the model
+      const success = ModelPathUtils.setValueAtPath(rootInstance, fullPath, Value);
+      
+      if (success) {
+        console.debug(`Updated property at path ${fullPath} to:`, Value);
+        
+        // Let the BindingManager handle the view updates by dispatching a MODEL_TO_VIEW_PROPERTY_CHANGED event
+        // The BindingManager subscribes to this event and will update all relevant view components
+        if (this._app?.eventManager) {
+          // Use PascalCase field names for consistency with EventTypes schema
+          this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+            Path: fullPath,
+            Property: PropertyName,
+            Value: Value,
+            OldValue: oldValue,
+            Source: Source || 'server'
+          });
+        }
+      } else {
+        console.error(`Failed to update property at path ${fullPath}`);
+        
+        // Notify about the error
+        if (this._app?.eventManager) {
+          this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+            ID: 'PROPERTY_UPDATE_ERROR',
+            Message: `Failed to update property at path ${fullPath}`,
+            Error: 'Path not found in model'
+          });
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error handling server property update:', error);
+      
+      // Notify about the error
+      if (this._app?.eventManager) {
+        this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+          ID: 'PROPERTY_UPDATE_ERROR',
+          Message: 'Failed to process server property update',
+          Error: error.message,
+          Stack: error.stack
+        });
+      }
+    }
   }
   
   /**
@@ -359,6 +453,429 @@ export class ClientModel extends EventListener {
         });
       }
     }
+  }
+  
+  /**
+   * Handle view-to-model property changes
+   * @param {Object} eventData - The event data containing the property change
+   * @param {string} eventData.path - The path to the property that changed
+   * @param {any} eventData.value - The new value of the property
+   * @param {any} eventData.oldValue - The previous value of the property (optional)
+   * @param {string} eventData.source - The source of the change (optional)
+   */
+  handle_view_to_model_property_changed(eventData) {
+    try {
+      // Extract data using lowercase field names from binding framework
+      const { path, value, oldValue, source } = eventData;
+      
+      if (!path) {
+        console.error('Invalid property change event - missing path:', eventData);
+        return;
+      }
+      
+      // Get the root instance from the client model
+      const rootInstance = this.getRootInstance();
+      if (!rootInstance) {
+        console.warn('Cannot update property: No model loaded');
+        return;
+      }
+      
+      // Update the property in the model
+      const success = ModelPathUtils.setValueAtPath(rootInstance, path, value);
+      
+      if (success) {
+        console.debug(`Updated property at path ${path} to:`, value);
+        
+        // Track this change as pending until confirmed by server
+        this.trackPendingChange(path, value, oldValue);
+        
+        // Send the change to the server
+        this.sendPropertyChangeToServer(path, value);
+        
+        // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
+        if (this._app?.eventManager) {
+          this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+            Path: path,
+            Property: path.split('.').pop(),
+            Value: value,
+            OldValue: oldValue,
+            Source: source || 'view'
+          });
+          console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for path ${path}`);
+        }
+      } else {
+        console.error(`Failed to update property at path ${path}`);
+        
+        // Notify about the error
+        if (this._app?.eventManager) {
+          this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+            ID: 'PROPERTY_UPDATE_ERROR',
+            Message: `Failed to update property at path ${path}`,
+            Error: 'Path not found in model'
+          });
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error handling view-to-model property change:', error);
+      
+      // Notify about the error
+      if (this._app?.eventManager) {
+        this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+          ID: 'PROPERTY_UPDATE_ERROR',
+          Message: 'Failed to process view-to-model property change',
+          Error: error.message,
+          Stack: error.stack
+        });
+      }
+    }
+  }
+  
+  /**
+   * Track a pending property change
+   * @param {string} path - The path to the property
+   * @param {any} value - The new value
+   * @param {any} oldValue - The previous value
+   */
+  trackPendingChange(path, value, oldValue) {
+    if (!path) return;
+    
+    this._pendingChanges.set(path, {
+      path,
+      value,
+      oldValue,
+      timestamp: Date.now(),
+      status: 'pending'
+    });
+    
+    console.debug(`Tracked pending change for ${path}:`, { value, oldValue });
+  }
+  
+  /**
+   * Mark a pending change as rejected
+   * @param {string} path - The path to the property
+   * @param {string} errorMessage - The error message
+   * @private
+   */
+  _markPendingChangeAsRejected(path, errorMessage) {
+    if (!path || !this._pendingChanges.has(path)) return;
+    
+    const pendingChange = this._pendingChanges.get(path);
+    pendingChange.status = 'rejected';
+    pendingChange.error = errorMessage || 'Change rejected by server';
+    
+    console.debug(`Marked pending change as rejected for ${path}:`, pendingChange);
+    
+    // Dispatch an error event
+    if (this._app?.eventManager) {
+      this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+        ID: 'PROPERTY_CHANGE_REJECTED',
+        Message: `Property change for ${path} was rejected by the server`,
+        Error: errorMessage || 'No error details provided'
+      });
+    }
+    
+    // Roll back the change in the model
+    this._rollBackRejectedChange(path, pendingChange.oldValue);
+    
+    // Clean up the rejected change after a delay
+    setTimeout(() => {
+      if (this._pendingChanges.has(path) && 
+          this._pendingChanges.get(path).status === 'rejected') {
+        this._pendingChanges.delete(path);
+        console.debug(`Cleaned up rejected change for ${path}`);
+      }
+    }, 5000); // Clean up after 5 seconds
+  }
+  
+  /**
+   * Roll back a rejected property change
+   * @param {string} path - The path to the property
+   * @param {any} oldValue - The previous value to restore
+   * @private
+   */
+  _rollBackRejectedChange(path, oldValue) {
+    if (!path) return;
+    
+    const rootInstance = this.getRootInstance();
+    if (!rootInstance) {
+      console.warn('Cannot rollback rejected change: No model loaded');
+      return;
+    }
+    
+    // Restore the old value in the model
+    const success = ModelPathUtils.setValueAtPath(rootInstance, path, oldValue);
+    
+    if (success) {
+      console.debug(`Rolled back rejected change for ${path} to:`, oldValue);
+      
+      // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views with the original value
+      if (this._app?.eventManager) {
+        this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+          Path: path,
+          Property: path.split('.').pop(),
+          Value: oldValue,
+          Source: 'rollback'
+        });
+        console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for rolled back value at ${path}`);
+      }
+    } else {
+      console.error(`Failed to rollback rejected change for path ${path}`);
+    }
+  }
+  
+  /**
+   * Send a property change to the server
+   * @param {string} path - The path to the property
+   * @param {any} value - The new value
+   */
+  sendPropertyChangeToServer(path, value) {
+    if (!path) {
+      console.error('Cannot send property change to server: Path is required');
+      return;
+    }
+    
+    // Split the path into object path and property name
+    // The last segment is the property name, the rest is the object path
+    const pathParts = path.split('.');
+    const propertyName = pathParts.pop();
+    const objectPath = pathParts.join('.');
+    
+    // If event manager is not available, just keep the pending change tracked
+    // We'll have a way to resend these later
+    if (!this._app?.eventManager) {
+      console.warn('Cannot send property change to server: Event manager not available, keeping as pending');
+      return; // Keep the pending change, don't mark as rejected
+    }
+    
+    // Define success callback for the method call
+    const successCallback = (response) => {
+      console.debug(`Server processed property change for ${path}:`, response);
+      
+      // If the server returned an error in the response, mark as rejected
+      if (response && response.Success === false) {
+        this._markPendingChangeAsRejected(path, response.Error || 'Server rejected the change');
+      }
+      // Otherwise, we'll wait for the SERVER_MODEL_PROPERTY_UPDATED event
+      // to confirm and clear the pending change
+    };
+    
+    // Define error callback for the method call
+    const errorCallback = (error) => {
+      console.error(`Error updating property ${path}:`, error);
+      // Mark the pending change as rejected and roll back
+      this._markPendingChangeAsRejected(path, error.message || 'Server communication error');
+    };
+    
+    // Prepare method arguments using PascalCase field names for consistency in server communication
+    const methodArgs = {
+      MethodName: 'handle_client_property_changed', // Method to call
+      ObjectPath: objectPath,
+      Args: { 
+        PropertyName: propertyName,
+        Value: value,
+        Source: 'Client' // Use PascalCase for consistency
+      },
+      // Include callbacks for handling the response
+      Callback: successCallback,
+      ErrorCallback: errorCallback
+    };
+    
+    // Dispatch MATLAB_METHOD_CALL_REQUEST event through the event system
+    // The service layer will pick this up, forward it to the server, and handle the response
+    this._app.eventManager.dispatchEvent(EventTypes.MATLAB_METHOD_CALL_REQUEST, methodArgs);
+    
+    console.debug(`Sent property change to server via service layer:`, { path, value, objectPath, propertyName });
+  }
+
+/**
+ * Track a pending property change
+ * @param {string} path - The path to the property
+ * @param {any} value - The new value
+ * @param {any} oldValue - The previous value
+ */
+trackPendingChange(path, value, oldValue) {
+  if (!path) return;
+  
+  this._pendingChanges.set(path, {
+    path,
+    value,
+    oldValue,
+    timestamp: Date.now(),
+    status: 'pending'
+  });
+  
+  console.debug(`Tracked pending change for ${path}:`, { value, oldValue });
+}
+
+/**
+ * Mark a pending change as rejected
+ * @param {string} path - The path to the property
+ * @param {string} errorMessage - The error message
+ * @private
+ */
+_markPendingChangeAsRejected(path, errorMessage) {
+  if (!path || !this._pendingChanges.has(path)) return;
+  
+  const pendingChange = this._pendingChanges.get(path);
+  pendingChange.status = 'rejected';
+  pendingChange.error = errorMessage || 'Change rejected by server';
+  
+  console.debug(`Marked pending change as rejected for ${path}:`, pendingChange);
+  
+  // Dispatch an error event
+  if (this._app?.eventManager) {
+    this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
+      ID: 'PROPERTY_CHANGE_REJECTED',
+      Message: `Property change for ${path} was rejected by the server`,
+      Error: errorMessage || 'No error details provided'
+    });
+  }
+  
+  // Roll back the change in the model
+  this._rollBackRejectedChange(path, pendingChange.oldValue);
+  
+  // Clean up the rejected change after a delay
+  setTimeout(() => {
+    if (this._pendingChanges.has(path) && 
+        this._pendingChanges.get(path).status === 'rejected') {
+      this._pendingChanges.delete(path);
+      console.debug(`Cleaned up rejected change for ${path}`);
+    }
+  }, 5000); // Clean up after 5 seconds
+}
+
+/**
+ * Roll back a rejected property change
+ * @param {string} path - The path to the property
+ * @param {any} oldValue - The previous value to restore
+ * @private
+ */
+_rollBackRejectedChange(path, oldValue) {
+  if (!path) return;
+  
+  const rootInstance = this.getRootInstance();
+  if (!rootInstance) {
+    console.warn('Cannot rollback rejected change: No model loaded');
+    return;
+  }
+  
+  // Restore the old value in the model
+  const success = ModelPathUtils.setValueAtPath(rootInstance, path, oldValue);
+  
+  if (success) {
+    console.debug(`Rolled back rejected change for ${path} to:`, oldValue);
+    
+    // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views with the original value
+    if (this._app?.eventManager) {
+      this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
+        Path: path,
+        Property: path.split('.').pop(),
+        Value: oldValue,
+        Source: 'rollback'
+      });
+      console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for rolled back value at ${path}`);
+    }
+  } else {
+    console.error(`Failed to rollback rejected change for path ${path}`);
+  }
+}
+
+/**
+ * Send a property change to the server
+ * @param {string} path - The path to the property
+ * @param {any} value - The new value
+ */
+sendPropertyChangeToServer(path, value) {
+  if (!path) return;
+  
+  // Split the path into object path and property name
+  // The last segment is the property name, the rest is the object path
+  const pathParts = path.split('.');
+  const propertyName = pathParts.pop();
+  
+  // Ensure the object path starts with "RootModel"
+  let objectPath = pathParts.join('.');
+  if (!objectPath.startsWith('RootModel')) {
+    objectPath = objectPath ? `RootModel.${objectPath}` : 'RootModel';
+  }
+  
+  // If event manager is not available, just keep the pending change tracked
+  // We'll have a way to resend these later
+  if (!this._app?.eventManager) {
+    console.warn('Cannot send property change to server: Event manager not available, keeping as pending');
+    return; // Keep the pending change, don't mark as rejected
+  }
+  
+  // Request ID will be generated by the service layer
+  
+  // Define success callback for the method call
+  const successCallback = (response) => {
+    console.debug(`Server processed property change for ${path}:`, response);
+    
+    // If the server returned an error in the response, mark as rejected
+    if (response && response.Success === false) {
+      this._markPendingChangeAsRejected(path, response.Error || 'Server rejected the change');
+    }
+    // Otherwise, we'll wait for the SERVER_MODEL_PROPERTY_UPDATED event
+    // to confirm and clear the pending change
+  };
+  
+  // Define error callback for the method call
+  const errorCallback = (error) => {
+    console.error(`Error updating property ${path}:`, error);
+    // Mark the pending change as rejected and roll back
+    this._markPendingChangeAsRejected(path, error.message || 'Server communication error');
+  };
+  
+  // Prepare method arguments using PascalCase field names for consistency in server communication
+  const methodArgs = {
+    MethodName: 'updateProperty', // Method to call
+    ObjectPath: objectPath,
+    Args: { // Method arguments
+      PropertyName: propertyName,
+      Value: value,
+      Source: 'Client' // Use PascalCase for consistency
+    },
+    // Include callbacks for handling the response
+    Callback: successCallback,
+    ErrorCallback: errorCallback
+  };
+  
+  // Dispatch MATLAB_METHOD_CALL_REQUEST event through the event system
+  // The service layer will pick this up, forward it to the server, and handle the response
+  this._app.eventManager.dispatchEvent(EventTypes.MATLAB_METHOD_CALL_REQUEST, methodArgs);
+  
+  console.debug(`Sent property change to server via event system:`, { path, value, objectPath, propertyName });
+  }
+  
+  /**
+   * Mark a pending change as confirmed by the server
+   * @param {string} path - The path to the property
+   */
+  confirmPendingChange(path) {
+    if (!path || !this._pendingChanges.has(path)) return;
+    
+    const pendingChange = this._pendingChanges.get(path);
+    pendingChange.status = 'confirmed';
+    pendingChange.confirmedAt = new Date().toISOString();
+    
+    // Keep the confirmed change for a short time for debugging
+    setTimeout(() => {
+      if (this._pendingChanges.has(path)) {
+        this._pendingChanges.delete(path);
+      }
+    }, 5000); // Remove after 5 seconds
+    
+    console.debug(`Confirmed pending change for ${path}`);
+  }
+  
+  /**
+   * Get all pending changes
+   * @returns {Array} Array of pending changes
+   */
+  getPendingChanges() {
+    return Array.from(this._pendingChanges.values());
   }
   
   /**

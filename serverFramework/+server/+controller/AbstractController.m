@@ -8,7 +8,7 @@ classdef AbstractController < handle
         UIHTML matlab.ui.control.HTML {mustBeScalarOrEmpty} = matlab.ui.control.HTML.empty
     end
     
-    properties (Access=protected)
+    properties (GetAccess=public, SetAccess=protected)
         RootModel server.model.RootModel {mustBeScalarOrEmpty} = server.model.RootModel.empty
     end
     
@@ -22,6 +22,47 @@ classdef AbstractController < handle
                 obj.UIHTML = uiHTML;
                 obj.UIHTML.HTMLEventReceivedFcn = @(source, event)dispatch(obj, source, event);
             end
+        end
+    end
+    
+    methods (Access=protected)
+        function setupModelListeners(obj)
+            % SETUPMODELLISTENERS Set up listeners for model changes
+            %   This method sets up a listener for the ModelChanged event on the RootModel
+            %   When a model property changes, it will notify the client
+            
+            if isempty(obj.RootModel)
+                warning('Cannot set up model listeners: Root model not initialized');
+                return;
+            end
+            
+            % Create listener for ModelChanged events
+            addlistener(obj.RootModel, 'ModelChanged', @obj.onModelChanged);
+        end
+        
+        function onModelChanged(obj, ~, eventData)
+            % ONMODELCHANGED Handle ModelChanged events from the RootModel
+            %   This method is called when any property in the model hierarchy changes
+            %   It notifies the client of the change via a server_notification event
+            
+            % Extract event data
+            affectedObj = eventData.UpdatedObject;
+            propertyName = eventData.PropertyName;
+            
+            % Get the object path for the changed object
+            objectPath = obj.RootModel.getPathFromUid(affectedObj.Uid, propertyName);
+            
+            % Create notification data
+            notificationData = struct(...
+                'EventID', 'SERVER_MODEL_PROPERTY_UPDATED', ...
+                'EventData', struct(...
+                    'ObjectPath', objectPath, ...
+                    'PropertyName', propertyName, ...
+                    'Value', affectedObj.(propertyName), ...
+                    'Source', 'server'));
+            
+            % Send notification to client
+            obj.notifyApp('server_notification', notificationData);
         end
     end
 
@@ -55,9 +96,10 @@ classdef AbstractController < handle
                 obj (1,1)
             end
 
-            obj.RootModel = obj.constructNewRootModel(obj, struct);
+            obj.RootModel = obj.constructNewRootModel(struct);
             
-            obj.RootModel = rootModel;
+            % Set up listeners for model changes
+            obj.setupModelListeners();
 
             results.RootModel = obj.RootModel.toData();
         end
@@ -74,9 +116,18 @@ classdef AbstractController < handle
 
             obj.RootModel = obj.constructNewRootModel(inputs.RootModelData);
             
+            % Set up listeners for model changes
+            obj.setupModelListeners();
+            
             % No returned results
             results = struct;
-        end        
+
+            broadcastNotification = struct(...
+                "EventID", "SERVER_MODEL_UPDATED", ...
+                "EventData", struct(...
+                    "Data", obj.RootModel.toData()));
+            obj.notifyApp("server_notification", broadcastNotification);
+        end
     end
     
     methods (Abstract, Access=protected)
@@ -128,8 +179,8 @@ classdef AbstractController < handle
                 error('Cannot resolve path: Root model not initialized');
             end
             
-            % Start from root model
-            targetObj = obj.RootModel;
+            % Start from controller
+            targetObj = obj;
             
             % Split path into segments
             segments = strsplit(path, '.');

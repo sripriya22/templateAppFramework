@@ -40,6 +40,7 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         // Bind methods
         this._handleMatlabResponse = this._handleMatlabResponse.bind(this);
         this._handleMatlabError = this._handleMatlabError.bind(this);
+        this._handleServerNotification = this._handleServerNotification.bind(this);
         
         // If HTML component is provided, store it (but don't initialize yet)
         if (htmlComponent) {
@@ -113,6 +114,9 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         
         // Listen for method call errors from MATLAB
         this._htmlComponent.addEventListener('matlab_method_call_error', this._handleMatlabError);
+        
+        // Listen for server events (including property updates)
+        this._htmlComponent.addEventListener('server_notification', this._handleServerNotification);
     }
     
     /**
@@ -126,21 +130,22 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         }
         
         // Validate event data
-        const { RequestId, MethodName, ObjectPath, Args } = event;
-        
-        if (!RequestId) {
-            throw new Error('Invalid MATLAB method call request: missing RequestId');
-        }
+        const { MethodName, ObjectPath, Args, Callback, ErrorCallback } = event;
         
         if (!MethodName) {
             throw new Error('Invalid MATLAB method call request: missing MethodName');
         }
         
-        // Store the pending call
-        this._pendingCalls.set(RequestId, {
+        // Generate a unique request ID for tracking this request
+        const requestId = this._generateRequestId(MethodName);
+        
+        // Store the pending call along with callbacks
+        this._pendingCalls.set(requestId, {
             timestamp: Date.now(),
             MethodName,
-            ObjectPath
+            ObjectPath,
+            Callback,       // Store success callback function
+            ErrorCallback  // Store error callback function
         });
         
         // Helper function to recursively serialize model objects
@@ -174,7 +179,7 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         
         // Prepare data for MATLAB
         const eventData = {
-            RequestId,
+            RequestId: requestId,
             MethodName,
             ObjectPath: ObjectPath || '',
             Args: serializedArgs
@@ -183,19 +188,28 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         try {
             // Send the event to MATLAB
             this._htmlComponent.sendEventToMATLAB('matlab_method_call_request', eventData);
-            console.log(`Sent MATLAB method call request: ${MethodName} (ID: ${RequestId})`);
+            console.log(`Sent MATLAB method call request: ${MethodName} (ID: ${requestId})`);
         } catch (error) {
+            // Execute error callback if provided
+            if (typeof ErrorCallback === 'function') {
+                try {
+                    ErrorCallback(new Error(`Failed to send MATLAB method call: ${error.message}`));
+                } catch (callbackError) {
+                    console.error(`Error executing error callback for request ${requestId}:`, callbackError);
+                }
+            }
+            
             // Clean up pending call
             this._pendingCalls.delete(requestId);
             
             // Dispatch server error event
             this._eventManager.dispatchEvent(EventTypes.SERVER_ERROR, {
-                id: 'MATLAB_CALL_FAILED',
-                message: `Failed to send MATLAB method call: ${method}`,
-                details: {
-                    requestId,
-                    method: method,
-                    error: error.message
+                ID: 'MATLAB_CALL_FAILED',
+                Message: `Failed to send MATLAB method call: ${MethodName}`,
+                Details: {
+                    RequestId: requestId,
+                    Method: MethodName,
+                    Error: error.message
                 }
             });
         }
@@ -203,68 +217,153 @@ export class UIHTMLServiceLayer extends ServiceLayer {
     
     /**
      * Handle responses from MATLAB method calls
-     * @param {Object} response - The response data from MATLAB
+     * @param {Object} UIHTMLEventData - The event data from MATLAB containing the response
      * @private
      */
-    _handleMatlabResponse(response) {
-        const { requestId, result } = response;
-        
-        if (!requestId) {
-            // Hard error for invalid response
-            throw new Error('Invalid MATLAB response: missing requestId');
-        }
-        
-        const pendingCall = this._pendingCalls.get(requestId);
-        if (!pendingCall) {
-            console.warn(`Received MATLAB response for unknown request ID: ${requestId}`);
+    _handleMatlabResponse(UIHTMLEventData) {
+        // Extract the response data from the event
+        if (!UIHTMLEventData || !UIHTMLEventData.Data) {
+            console.error('Invalid MATLAB response event:', UIHTMLEventData);
             return;
         }
         
+        const responseData = UIHTMLEventData.Data;
+        const { RequestId, Results, MethodName } = responseData;
+        
+        if (!RequestId) {
+            // Hard error for invalid response
+            throw new Error('Invalid MATLAB response: missing RequestId');
+        }
+        
+        const pendingCall = this._pendingCalls.get(RequestId);
+        if (!pendingCall) {
+            console.warn(`Received MATLAB response for unknown request ID: ${RequestId}`);
+            return;
+        }
+        
+        const { Callback } = pendingCall;
+        
+        // Execute success callback if provided
+        if (typeof Callback === 'function') {
+            try {
+                Callback(Results);
+            } catch (error) {
+                console.error(`Error executing success callback for request ${RequestId}:`, error);
+            }
+        }
+        
         // Remove from pending calls
-        this._pendingCalls.delete(requestId);
+        this._pendingCalls.delete(RequestId);
         
-        // Execute callback if registered
-        this._executeCallback(requestId, result, null);
-        
-        console.log(`Received MATLAB response for ${pendingCall.method} (ID: ${requestId})`);
+        console.log(`Received MATLAB response for ${MethodName || pendingCall.MethodName} (ID: ${RequestId})`);
     }
     
     /**
-     * Handle errors from MATLAB method calls
-     * @param {Object} errorData - The error data from MATLAB
+     * Handle server notifications from MATLAB
+     * @param {Object} UIHTMLEventData - The server notification event from the UIHTML component
      * @private
      */
-    _handleMatlabError(errorData) {
-        const { requestId, error } = errorData;
-        
-        if (!requestId) {
-            // Hard error for invalid error data
-            throw new Error('Invalid MATLAB error response: missing requestId');
-        }
-        
-        const pendingCall = this._pendingCalls.get(requestId);
-        if (!pendingCall) {
-            console.warn(`Received MATLAB error for unknown request ID: ${requestId}`);
+    _handleServerNotification(UIHTMLEventData) {
+        // Extract the notification data from the event
+        if (!UIHTMLEventData || !UIHTMLEventData.Data) {
+            console.error('Invalid server notification received:', UIHTMLEventData);
             return;
         }
         
+        // Extract the notification data
+        const notification = UIHTMLEventData.Data;
+        console.log('Received server notification:', notification);
+        
+        // Check if the notification has the expected structure
+        if (!notification.EventID || !notification.EventData) {
+            console.error('Invalid server notification format:', notification);
+            return;
+        }
+        
+        const { EventID, EventData } = notification;
+        
+        // Forward the event to the appropriate handlers using the EventID
+        // This allows the server to specify which event type to dispatch
+        if (EventTypes[EventID]) {
+            console.log(`Dispatching ${EventID} event from server notification`);
+            this._app.eventManager.dispatchEvent(EventTypes[EventID], EventData);
+        } else {
+            console.warn(`Unknown event type in server notification: ${EventID}`, EventData);
+        }
+    }
+    
+    /**
+     * Generates a unique request ID for MATLAB method calls
+     * @param {string} methodName - The method name being called
+     * @returns {string} A unique request ID
+     * @private
+     */
+    _generateRequestId(methodName) {
+        const prefix = methodName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+        const timestamp = Date.now().toString(36);
+        const random = Math.random().toString(36).substring(2, 10);
+        return `${prefix}_${timestamp}_${random}`;
+    }
+
+    /**
+     * Handle errors from MATLAB method calls
+     * @param {Object} UIHTMLEventData - The error event data from MATLAB
+     * @private
+     */
+    _handleMatlabError(UIHTMLEventData) {
+        // Extract the error data from the event
+        if (!UIHTMLEventData || !UIHTMLEventData.Data) {
+            console.error('Invalid MATLAB error event:', UIHTMLEventData);
+            return;
+        }
+        
+        const errorData = UIHTMLEventData.Data;
+        const { RequestId, Error: errorMessage, Stack: errorStack } = errorData;
+        
+        if (!RequestId) {
+            // Hard error for invalid response
+            throw new Error('Invalid MATLAB error: missing RequestId');
+        }
+        
+        const pendingCall = this._pendingCalls.get(RequestId);
+        if (!pendingCall) {
+            console.warn(`Received MATLAB error for unknown request ID: ${RequestId}`);
+            return;
+        }
+        
+        const { MethodName, ErrorCallback } = pendingCall;
+        
+        // Prepare error object
+        const errorObj = new Error(errorMessage || 'Unknown MATLAB error');
+        errorObj.stack = errorStack;
+        errorObj.requestId = RequestId;
+        errorObj.methodName = MethodName;
+        
+        // Execute error callback if provided
+        if (typeof ErrorCallback === 'function') {
+            try {
+                ErrorCallback(errorObj);
+            } catch (callbackError) {
+                console.error(`Error executing error callback for request ${RequestId}:`, callbackError);
+            }
+        }
+        
         // Remove from pending calls
-        this._pendingCalls.delete(requestId);
+        this._pendingCalls.delete(RequestId);
         
-        // Execute callback if registered
-        this._executeCallback(requestId, null, error);
-        
-        // Also dispatch a SERVER_ERROR event for general error handling
-        this._eventManager.dispatchEvent({
-            type: EventTypes.SERVER_ERROR,
-            ID: 'MATLAB_METHOD_ERROR',
-            Message: `Error calling MATLAB method ${pendingCall.method}`,
+        // Dispatch server error event
+        this._app.eventManager.dispatchEvent(EventTypes.SERVER_ERROR, {
+            ID: 'MATLAB_ERROR',
+            Message: `MATLAB error in method call ${MethodName}: ${errorMessage}`,
             Details: {
-                requestId,
-                method: pendingCall.method,
-                error
+                RequestId: RequestId,
+                Method: MethodName,
+                Error: errorMessage,
+                Stack: errorStack
             }
         });
+        
+        console.error(`MATLAB error for ${MethodName} (ID: ${RequestId}):`, errorMessage);
     }
     
     /**

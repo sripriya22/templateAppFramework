@@ -20,15 +20,13 @@ export class BindingManager {
     this.eventManager = this.app.eventManager;
     this.bindings = [];
     
-    // Subscribe to property change events with separate handlers for each direction
+    // Subscribe only to MODEL_TO_VIEW_PROPERTY_CHANGED events
+    // The ClientModel will now directly handle VIEW_TO_MODEL_PROPERTY_CHANGED events
     this.eventManager.addEventListener(
       EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, 
       this._handleModelToViewPropertyChanged.bind(this)
     );
-    this.eventManager.addEventListener(
-      EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, 
-      this._handleViewToModelPropertyChanged.bind(this)
-    );
+    
     this.createBinding = this.createBinding.bind(this);
     this.removeBinding = this.removeBinding.bind(this);
     this.removeAllBindings = this.removeAllBindings.bind(this);
@@ -167,9 +165,15 @@ export class BindingManager {
    * @returns {Binding[]} Array of bindings for the path
    */
   getBindingsForPath(path) {
+    // Normalize the path by removing RootModel prefix if present
+    const normalizedPath = this._normalizePathForBinding(path);
+    
     return this.bindings.filter(binding => {
-      // Match bindings with the exact path
-      if (binding.path === path) {
+      // Normalize the binding path as well
+      const normalizedBindingPath = this._normalizePathForBinding(binding.path);
+      
+      // Match bindings with the exact path (after normalization)
+      if (normalizedBindingPath === normalizedPath) {
         return true;
       }
       
@@ -180,19 +184,19 @@ export class BindingManager {
       
       // Handle array paths - match array items when the array itself changes
       // For example, if path is 'items', match 'items[0].name', 'items[1].age', etc.
-      if (path && binding.path && binding.path.startsWith(path + '[')) {
+      if (normalizedPath && normalizedBindingPath && normalizedBindingPath.startsWith(normalizedPath + '[')) {
         return true;
       }
       
       // Handle array item changes - match specific array items
       // For example, if path is 'items[0].name', match that specific binding
-      if (path && binding.path) {
+      if (normalizedPath && normalizedBindingPath) {
         // Extract the array path and index from the changed path
-        const arrayMatch = path.match(/^(.+?)\[(\d+)\](.*)$/);
+        const arrayMatch = normalizedPath.match(/^(.+?)\[(\d+)\](.*)$/);
         if (arrayMatch) {
           const [, arrayPath, index, remainder] = arrayMatch;
           // Check if the binding path matches this array path pattern
-          const bindingArrayMatch = binding.path.match(/^(.+?)\[(\d+)\](.*)$/);
+          const bindingArrayMatch = normalizedBindingPath.match(/^(.+?)\[(\d+)\](.*)$/);
           if (bindingArrayMatch) {
             const [, bindingArrayPath, bindingIndex, bindingRemainder] = bindingArrayMatch;
             // If array paths match and indices match, and the remainder matches or is a prefix
@@ -210,6 +214,24 @@ export class BindingManager {
   }
   
   /**
+   * Normalize a path for binding comparison by handling RootModel prefix
+   * @param {string} path - The path to normalize
+   * @returns {string} The normalized path
+   * @private
+   */
+  _normalizePathForBinding(path) {
+    if (!path) return path;
+    
+    // Remove RootModel prefix if present for binding comparison
+    // This allows bindings registered without the RootModel prefix to still match
+    if (path.startsWith('RootModel.')) {
+      return path.substring('RootModel.'.length);
+    }
+    
+    return path;
+  }
+  
+  /**
    * Destroy the binding manager and all bindings
    */
   destroy() {
@@ -218,37 +240,9 @@ export class BindingManager {
     this.eventManager = null;
   }
   
-  /**
-   * Handle VIEW_TO_MODEL_PROPERTY_CHANGED events
-   * @param {Object} eventData - The event data
-   * @private
-   */
-  _handleViewToModelPropertyChanged(eventData) {
-    // Get the path and value from the event
-    const { path, value } = eventData;
-    
-    // Get the client model directly from the app
-    const clientModel = this.app.getModel();
-    
-    if (clientModel) {
-      // Get the root instance from the client model
-      const rootInstance = clientModel.getRootInstance();
-      
-      // Update the model (could add validation here)
-      ModelPathUtils.setValueAtPath(rootInstance, path, value);
-      
-      // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
-      this.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
-        path: path,
-        value: value,
-        source: 'binding_manager'
-      });
-      
-      console.log(`Updated model for path ${path} and dispatched MODEL_TO_VIEW_PROPERTY_CHANGED`);
-    } else {
-      console.error('No client model available to update for path:', path);
-    }
-  }
+  // The _handleViewToModelPropertyChanged method has been removed
+  // ClientModel now directly handles VIEW_TO_MODEL_PROPERTY_CHANGED events
+  // This maintains clearer separation of concerns with ClientModel managing all model state
   
   /**
    * Handle model-to-view property change events
@@ -256,15 +250,28 @@ export class BindingManager {
    * @private
    */
   _handleModelToViewPropertyChanged(eventData) {
+    if (!eventData || !eventData.Path) {
+      console.error('Invalid event data in _handleModelToViewPropertyChanged:', eventData);
+      return;
+    }
+    
+    // Extract path from eventData using PascalCase field name
+    const path = eventData.Path;
+    
     // Find bindings that match the changed path
-    const matchingBindings = this.getBindingsForPath(eventData.path);    
+    // TODO: we need to standardize the paths
+    const normalizedPath = this._normalizePathForBinding(path);
+    eventData.Path = normalizedPath;
+    const matchingBindings = this.getBindingsForPath(normalizedPath);    
     
     // Update regular bindings
     if (matchingBindings.length > 0) {
-      console.log(`Updating ${matchingBindings.length} regular bindings for path ${eventData.path}`);
+      console.log(`Updating ${matchingBindings.length} bindings for path ${path}`);
       matchingBindings.forEach(binding => {
         binding.handleModelChange(eventData);
       });
+    } else {
+      console.debug(`No bindings found for path ${path}`);
     }
   }
 }

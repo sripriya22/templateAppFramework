@@ -1,11 +1,16 @@
 classdef (Abstract) BaseObject < handle
     % BASEOBJECT Base class for all model objects in the template app framework
     %   This class provides common functionality for all model objects,
-    %   including data serialization and object identity.
+    %   including data serialization, object identity, and property change notifications.
     
     properties (GetAccess=public, SetAccess=protected)
         % Unique identifier for the object
         Uid char = '';
+    end
+    
+    % This properties block is for model properties defined in derived classes
+    % The SetObservable attribute enables property change notifications
+    properties (GetAccess=public, SetAccess=public, SetObservable)
     end
     
     properties (Access=protected, Transient)
@@ -127,10 +132,9 @@ classdef (Abstract) BaseObject < handle
                     
                     % Get field value and property meta information
                     fieldValue = data.(fieldName);
-                    propInfo = findprop(obj, fieldName);
                     
                     % Set property value based on type
-                    obj = obj.setPropertyFromData(fieldName, fieldValue, propInfo, rootModel);
+                    obj = obj.setPropertyFromData(fieldName, fieldValue);
                 end
                 
                 % Now register with rootModel to get UID
@@ -158,7 +162,7 @@ classdef (Abstract) BaseObject < handle
             end
         end
         
-        function obj = setPropertyFromData(obj, propName, propValue, propInfo, rootModel)
+        function obj = setPropertyFromData(obj, propName, propValue)
             % SETPROPERTYFROMDATA Set a property value from data
             %   This method handles setting a property value based on its type,
             %   with special handling for nested objects and arrays.
@@ -166,8 +170,6 @@ classdef (Abstract) BaseObject < handle
             %   Parameters:
             %       propName: Name of the property
             %       propValue: Value from data struct
-            %       propInfo: Meta property information
-            %       rootModel: The root model (for nested object creation)
             %
             %   Returns:
             %       obj: The updated object (self)
@@ -213,7 +215,7 @@ classdef (Abstract) BaseObject < handle
                                 for j = 1:numElements
                                     element = propValue{j};
                                     if isstruct(element) && isscalar(element)
-                                        objArray{j} = feval(targetClass, rootModel, element);
+                                        objArray{j} = feval(targetClass, obj.RootModel, element);
                                     else
                                         % Direct assignment for non-struct elements
                                         objArray{j} = element;
@@ -233,7 +235,7 @@ classdef (Abstract) BaseObject < handle
                                 
                                 % Process each element
                                 for j = 1:numElements
-                                    objArray{j} = feval(targetClass.Name, rootModel, propValue(j));
+                                    objArray{j} = feval(targetClass.Name, obj.RootModel, propValue(j));
                                 end
                                 
                                 % Convert to array
@@ -242,7 +244,7 @@ classdef (Abstract) BaseObject < handle
                             return;
                         elseif isstruct(propValue) && isscalar(propValue)
                             % Single object
-                            obj.(propName) = feval(targetClass, rootModel, propValue);
+                            obj.(propName) = feval(targetClass, obj.RootModel, propValue);
                             return;
                         end
                     end
@@ -251,6 +253,29 @@ classdef (Abstract) BaseObject < handle
             
             % If we get here, just do direct assignment
             obj.(propName) = propValue;
+        end
+    end
+
+    methods (Access=public, Hidden)
+        function results = handle_updateProperty(obj, inputs)
+            arguments
+                obj (1,1)
+                inputs.PropertyName (1,1) string = missing
+                inputs.Value
+                inputs.Source (1,1) string = ""
+            end
+
+            if ismissing(inputs.PropertyName)
+                error("Must specify Property Name");
+            end
+            if ~isfield(inputs, "Value")
+                error("Must specify new Value");
+            end
+
+            obj.setPropertyFromData(inputs.PropertyName, inputs.Value);
+
+            % No return args
+            results = struct;
         end
     end
 
