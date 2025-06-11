@@ -309,7 +309,16 @@ export class ModelPanel extends BaseComponent {
         const widgetType = propConfig.widget || this._getDefaultWidgetType(value, propConfig, propDef);
         console.log(`Widget type for ${propPath}: ${widgetType}`);
         
-        const isEditable = propConfig.Editable !== false;
+        // Check if property is explicitly set as editable/non-editable in config
+        // If not specified, check if it's marked as ReadOnly in property info
+        let isEditable = propConfig.Editable !== false;
+        
+        // If Editable is not explicitly set in config, check for ReadOnly in property info
+        if (propConfig.Editable === undefined) {
+            if (propDef.ReadOnly === true) {
+                isEditable = false;
+            }
+        }
         
         // Extract objectPath and property from propPath
         const pathParts = propPath.split('.');

@@ -212,10 +212,14 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
         content{end+1} = '    %';
     end
 
-    % Properties section - all properties are SetObservable by default
-    % to enable property change notifications
-    content{end+1} = '    properties (SetObservable)';
-
+    % Properties are separated into two blocks:
+    % 1. ReadOnly properties (SetAccess=protected, GetAccess=public)
+    % 2. Regular properties (Access=public)
+    
+    % Separate properties into regular and readOnly groups
+    regularProps = {};
+    readOnlyProps = {};
+    
     % Add properties from JSON
     if isfield(jsonData, 'Properties')
         propNames = fieldnames(jsonData.Properties);
@@ -223,9 +227,13 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
             propName = propNames{i};
             prop = jsonData.Properties.(propName);
             
-            % Add property comment
+            % Determine if property is readOnly
+            isReadOnly = isfield(prop, 'ReadOnly') && prop.ReadOnly == true;
+            
+            % Prepare property comment
+            propComment = '';
             if isfield(prop, 'Description')
-                content{end+1} = ['        % ' prop.Description];
+                propComment = ['        % ' prop.Description];
             end
             
             % Determine property type, size, and default value
@@ -243,28 +251,60 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
                 end
             end
             
-            % Add property declaration with size validation
+            % Create property declaration with size validation
+            propDeclaration = '';
             if ~isempty(defaultValue)
                 if ~isempty(sizeStr)
-                    content{end+1} = sprintf('        %s %s %s = %s', propName, sizeStr, propType, defaultValue);
+                    propDeclaration = sprintf('        %s %s %s = %s', propName, sizeStr, propType, defaultValue);
                 else
-                    content{end+1} = sprintf('        %s %s = %s', propName, propType, defaultValue);
+                    propDeclaration = sprintf('        %s %s = %s', propName, propType, defaultValue);
                 end
             else
                 if ~isempty(sizeStr)
-                    content{end+1} = sprintf('        %s %s %s', propName, sizeStr, propType);
+                    propDeclaration = sprintf('        %s %s %s', propName, sizeStr, propType);
                 else
-                    content{end+1} = sprintf('        %s %s', propName, propType);
+                    propDeclaration = sprintf('        %s %s', propName, propType);
                 end
             end
             
-            % Add empty line between properties
-            content{end+1} = '';
+            % Add to appropriate property group
+            if isReadOnly
+                if ~isempty(propComment)
+                    readOnlyProps{end+1} = propComment;
+                end
+                readOnlyProps{end+1} = propDeclaration;
+                readOnlyProps{end+1} = '';
+            else
+                if ~isempty(propComment)
+                    regularProps{end+1} = propComment;
+                end
+                regularProps{end+1} = propDeclaration;
+                regularProps{end+1} = '';
+            end
         end
     end
 
-    content{end+1} = '    end  % properties';
-    content{end+1} = '';
+    % Add readOnly properties block if any exist
+    if ~isempty(readOnlyProps)
+        content{end+1} = '    properties (SetObservable, GetAccess=public, SetAccess=?server.model.BaseObject)';
+        % Add each property individually to avoid dimension mismatch
+        for i = 1:numel(readOnlyProps)
+            content{end+1} = readOnlyProps{i};
+        end
+        content{end+1} = '    end';
+        content{end+1} = '';
+    end
+    
+    % Add regular properties block if any exist
+    if ~isempty(regularProps)
+        content{end+1} = '    properties (SetObservable, Access=public)';
+        % Add each property individually to avoid dimension mismatch
+        for i = 1:numel(regularProps)
+            content{end+1} = regularProps{i};
+        end
+        content{end+1} = '    end';
+        content{end+1} = '';
+    end
 
     % No explicit constructor needed - using BaseObject's constructor
 
