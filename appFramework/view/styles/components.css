@@ -50,20 +50,6 @@
     margin-right: 6px;
 }
 
-/* Model Panel styles */
-.model-panel {
-    height: 100%;
-    overflow: auto;
-    padding: 16px;
-    background-color: var(--panel-background);
-}
-
-.model-form {
-    max-width: 800px;
-    margin: 0 auto;
-    font-family: var(--font-family);
-}
-
 .form-group {
     margin-bottom: 16px;
 }

@@ -236,7 +236,15 @@ class MyApp extends AbstractApp {
 - **MATLAB Integration**: Works with MATLAB's HTML component (`uihtml`) and runs standalone
 
 - **Data Binding**:
-  - To be implemented
+  - Done - TODO fill in this section
+
+- **CSS Organization Strategy**:
+  - **Component-specific CSS**: Each component with unique styling needs should have its own CSS file (e.g., `ModelPanel.css`, `dropdown-button.css`)
+  - **Shared/common CSS**: Elements used across multiple components should be defined in `components.css` (e.g., `.panel-header`, `.form-group`)
+  - **Global layout**: The `layout.css` file contains global layout structure styles
+  - **CSS rule precedence**: Component-specific CSS files should be the source of truth for their specific components
+  - **Avoid duplication**: Never define the same CSS class in multiple files
+  - **Variables**: Use CSS variables (defined in `:root`) for consistent styling
 
 ---
 
