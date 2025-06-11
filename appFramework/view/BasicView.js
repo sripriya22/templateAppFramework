@@ -64,7 +64,7 @@ export class BasicView extends AbstractView {
             // Add test button to toolstrip
             toolstrip.addButton({
                 id: 'load-model',
-                label: 'Load Test Model',
+                label: 'Load Test Data',
                 onClick: () => this._mockLoadModel()
             });
             

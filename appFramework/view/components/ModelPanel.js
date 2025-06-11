@@ -639,8 +639,8 @@ export class ModelPanel extends BaseComponent {
         const displayProps = arrayConfig.DisplayProperties || [];
         displayProps.sort((a, b) => (a.Order || 0) - (b.Order || 0));
         
-        // Optional index column
-        if (arrayConfig.ShowIndex !== false) {
+        // Hide index column by default, only show if explicitly enabled
+        if (arrayConfig.ShowIndex === true) {
             const indexTh = document.createElement('th');
             indexTh.textContent = arrayConfig.IndexHeader || '#';
             indexTh.className = 'array-index-column';
@@ -674,8 +674,8 @@ export class ModelPanel extends BaseComponent {
         array.forEach((item, index) => {
             const row = document.createElement('tr');
             
-            // Optional index column
-            if (arrayConfig.ShowIndex !== false) {
+            // Hide index column by default, only show if explicitly enabled
+            if (arrayConfig.ShowIndex === true) {
                 const indexCell = document.createElement('td');
                 indexCell.textContent = (index + 1).toString();
                 indexCell.className = 'array-index-column';
@@ -748,6 +748,13 @@ export class ModelPanel extends BaseComponent {
                                 parser = val => val;
                                 formatter = val => val || '';
                                 viewEvent = 'change';
+                                
+                                // Add event listeners for Enter key and blur (input field loses focus)
+                                widget.addEventListener('keydown', function(e) {
+                                    if (e.key === 'Enter') {
+                                        this.blur(); // Remove focus when Enter is pressed
+                                    }
+                                });
                             }
                             
                             // Create binding with objectPath and property separate
@@ -1047,15 +1054,22 @@ export class ModelPanel extends BaseComponent {
                     const fieldObjectPath = fieldPathParts.length > 0 ? fieldPathParts.join('.') : '';
                     
                     // Create binding for this input
+                    // Add event listeners for Enter key and blur (input field loses focus)
+                    if (type !== 'boolean') {
+                        input.addEventListener('keydown', function(e) {
+                            if (e.key === 'Enter') {
+                                this.blur(); // Remove focus when Enter is pressed
+                            }
+                        });
+                    }
+                    
                     this.createBinding({
                         model: model,
                         objectPath: fieldObjectPath,
                         property: fieldProperty,
-                        element: input,
-                        attribute: type === 'boolean' ? 'checked' : 'value',
-                        events: {
-                            view: type === 'boolean' || type === 'number' ? 'change' : 'input'
-                        },
+                        view: input,
+                        viewAttribute: type === 'boolean' ? 'checked' : 'value',
+                        viewEvent: type === 'boolean' ? 'change' : 'change', // Use 'change' instead of 'input' to only update on field exit
                         parser: type === 'number' ? val => parseFloat(val) : val => val
                     });
                 }
