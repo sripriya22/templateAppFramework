@@ -1,3 +1,5 @@
+import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
+
 /**
  * TreeTable widget for displaying hierarchical data in a table format
  * This is a reusable widget that can be used by components like ModelInspector
@@ -204,8 +206,13 @@ export class TreeTable {
      * @param {string} type - The data type
      */
     defaultNodeRenderer(row, node, path, level, type) {
-        // Extract the node name from the path
-        const nodeName = path.split('.').pop();
+        // Extract the node name from the path using standardized path utilities
+        // No fallbacks - path must be valid and parsable by ModelPathUtils
+        const { segments } = ModelPathUtils.parseObjectPath(path);
+        
+        // Get the last segment as the node name
+        // If no segments exist, this would be a structural or logical error that should be fixed
+        const nodeName = segments[segments.length - 1] || path;
         
         // Create name cell
         const nameCell = document.createElement('td');

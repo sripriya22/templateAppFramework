@@ -50,7 +50,7 @@ classdef AbstractController < handle
             propertyName = eventData.PropertyName;
             
             % Get the object path for the changed object
-            objectPath = obj.RootModel.getPathFromUid(affectedObj.Uid, propertyName);
+            objectPath = obj.RootModel.getPathFromUid(affectedObj.Uid);
             
             % Create notification data
             notificationData = struct(...
@@ -221,6 +221,8 @@ classdef AbstractController < handle
         function [propName, idx] = parseArraySegment(~, segment)
             % PARSEARRAYSEGMENT Parse array segment like 'property[1]'
             %   Returns property name and index
+            %   NOTE: Paths from JavaScript use 0-based indices, but MATLAB uses 1-based
+            %   This method automatically converts from JS 0-based to MATLAB 1-based
             
             tokens = regexp(segment, '^(.+)\[(\d+)\]$', 'tokens');
             if isempty(tokens) || numel(tokens{1}) ~= 2
@@ -228,7 +230,9 @@ classdef AbstractController < handle
             end
             
             propName = tokens{1}{1};
-            idx = str2double(tokens{1}{2});
+            % JavaScript indices are 0-based, MATLAB indices are 1-based
+            % Add 1 to convert from JS to MATLAB indexing
+            idx = str2double(tokens{1}{2}) + 1;
         end
         
         function obj = getObjectByUid(~, uid)

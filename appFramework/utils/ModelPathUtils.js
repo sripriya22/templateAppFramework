@@ -1,213 +1,249 @@
 /**
- * Utility class for working with model paths
- * Provides methods for creating, parsing, and resolving model paths
+ * Utility class for working with standardized model object paths
+ * Provides methods for creating, parsing, normalizing, and resolving object paths
+ * Uses dot notation with bracket indexing (e.g., 'RootModel.Compartment[2].Species[5]')
+ * All indices in JavaScript are 0-based, conversion to/from MATLAB's 1-based indexing is handled
  */
 export class ModelPathUtils {
   /**
-   * Create a model path from components
-   * @param {string} collectionName - The name of the collection (e.g., 'parameters')
-   * @param {number} [index] - The index in the collection (for arrays)
-   * @param {string} [property] - The property name
-   * @returns {string} The model path
+   * Create an object path using standardized dot notation with bracket indexing
+   * @param {Array<string>} segments - The path segments (e.g. ['RootModel', 'Compartment', 'Species'])
+   * @param {Array<number>} [indices] - The indices for indexed segments (0-based in JavaScript)
+   * @returns {string} The standardized object path (e.g. 'RootModel.Compartment[0].Species')
    */
-  static createPath(collectionName, index, property) {
-    let path = collectionName;
+  static createObjectPath(segments, indices) {
+    if (!segments || !segments.length) return 'RootModel';
     
-    if (index !== undefined && index !== null) {
-      path += `.${index}`;
+    // Ensure path starts with RootModel
+    const pathSegments = segments[0] === 'RootModel' ? [...segments] : ['RootModel', ...segments];
+    
+    // Build the path with bracket notation for indices
+    let result = pathSegments[0];
+    let indexCounter = 0;
+    
+    for (let i = 1; i < pathSegments.length; i++) {
+      if (indices && indices.length > indexCounter && 
+          pathSegments[i-1] !== 'RootModel' && // Don't apply index to RootModel
+          indices[indexCounter] !== undefined && indices[indexCounter] !== null) {
+        // Add index in bracket notation
+        result += `[${indices[indexCounter]}]`;
+        indexCounter++;
+      }
       
-      if (property) {
-        path += `.${property}`;
-      }
-    } else if (property) {
-      path += `.${property}`;
+      // Add the next segment
+      result += `.${pathSegments[i]}`;
     }
     
-    return path;
+    // Handle a trailing index if present
+    if (indices && indices.length > indexCounter && 
+        indices[indexCounter] !== undefined && indices[indexCounter] !== null) {
+      result += `[${indices[indexCounter]}]`;
+    }
+    
+    return result;
   }
   
   /**
-   * Parse a model path into components
-   * @param {string} path - The model path to parse
-   * @returns {Object} The parsed components { collectionName, index, property }
+   * Parse an object path in standardized format
+   * @param {string} path - The object path to parse (e.g. 'RootModel.Compartment[2].Species[5]')
+   * @returns {Object} The parsed components { segments: Array<string>, indices: Array<number> }
    */
-  static parsePath(path) {
-    if (!path) return {};
+  static parseObjectPath(path) {
+    // Return default segments and indices for empty path
+    if (!path) return { segments: ['RootModel'], indices: [] };
     
-    // Normalize path by removing RootModel prefix if present
-    path = this._normalizePath(path);
-    
-    const parts = path.split('.');
-    
-    if (parts.length === 1) {
-      return { collectionName: parts[0] };
+    // Convert to string and ensure path starts with RootModel
+    let pathString = String(path);
+    if (!pathString.startsWith('RootModel')) {
+      pathString = `RootModel.${pathString}`;
     }
     
-    if (parts.length === 2) {
-      if (/^\d+$/.test(parts[1])) {
-        return { 
-          collectionName: parts[0], 
-          index: parseInt(parts[1], 10) 
-        };
-      } else {
-        return { 
-          collectionName: parts[0], 
-          property: parts[1] 
-        };
+    const segments = [];
+    const indices = [];
+    
+    // Handle segments with bracket notation indices
+    // Regular expression to match segments with optional indices: 'SegmentName[index]'
+    const segmentRegex = /([^.\[\]]+)(\[\d+\])?/g;
+    let match;
+    
+    while ((match = segmentRegex.exec(pathString)) !== null) {
+      const segmentName = match[1];
+      const indexStr = match[2]; // Will be undefined if no brackets
+      
+      segments.push(segmentName);
+      
+      if (indexStr) {
+        // Extract number from brackets and convert to number
+        const index = parseInt(indexStr.substring(1, indexStr.length - 1), 10);
+        indices.push(index);
       }
     }
     
-    if (parts.length >= 3) {
-      return {
-        collectionName: parts[0],
-        index: /^\d+$/.test(parts[1]) ? parseInt(parts[1], 10) : null,
-        property: parts[2]
-      };
-    }
-    
-    return {};
+    return { segments, indices };
   }
   
-  /**
-   * Normalize a path by removing RootModel prefix if present
-   * @param {string} path - The path to normalize
-   * @returns {string} The normalized path
-   * @private
-   */
-  static _normalizePath(path) {
-    // TODO: We need to standardize paths across the application
-    // For now, just remove RootModel prefix if present
-    if (!path) return path;
-    
-    if (path.startsWith('RootModel.')) {
-      return path.substring('RootModel.'.length);
-    }
-    
-    return path;
-  }
+  // normalizeObjectPath has been removed - path standardization is now done directly in parseObjectPath
 
   /**
-   * Get a value from an object using a path
+   * Convert JavaScript 0-based indices to MATLAB 1-based indices in an object path
+   * @param {string} path - The object path with JS 0-based indices
+   * @returns {string} The path with MATLAB 1-based indices
+   */
+  static jsPathToMatlabPath(path) {
+    if (!path) return path;
+    
+    // Parse the object path to get segments and indices
+    const { segments, indices } = this.parseObjectPath(path);
+    
+    // Convert to 1-based indexing for MATLAB
+    const matlabIndices = indices.map(idx => idx + 1);
+    
+    // Recreate the path with converted indices
+    return this.createObjectPath(segments, matlabIndices);
+  }
+  
+  /**
+   * Convert MATLAB 1-based indices to JavaScript 0-based indices in an object path
+   * @param {string} path - The object path with MATLAB 1-based indices
+   * @returns {string} The path with JS 0-based indices
+   */
+  static matlabPathToJsPath(path) {
+    if (!path) return path;
+    
+    // Parse the object path to get segments and indices
+    const { segments, indices } = this.parseObjectPath(path);
+    
+    // Convert to 0-based indexing for JavaScript
+    const jsIndices = indices.map(idx => Math.max(0, idx - 1));
+    
+    // Recreate the path with converted indices
+    return this.createObjectPath(segments, jsIndices);
+  }
+  
+  /**
+   * Get a value from an object using a standardized object path
    * @param {Object} obj - The object to get the value from
    * @param {string} path - The path to the value
    * @returns {*} The value at the path, or undefined if not found
    */
-  static getValueFromPath(obj, path) {
+  static getValueFromObjectPath(obj, path) {
     if (!obj || !path) return undefined;
     
-    // Normalize path by removing RootModel prefix if present
-    path = this._normalizePath(path);
+    // Normalize and parse the path
+    const { segments, indices } = this.parseObjectPath(path);
     
-    // Handle array notation like Parameters[0].Value
-    // Convert to dot notation: Parameters.0.Value
-    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
-    const parts = normalizedPath.split('.');
-    
+    // Get value from the hierarchical object using segments and indices
     let current = obj;
-    for (const part of parts) {
+    let indexCounter = 0;
+    
+    // Skip 'RootModel' at the beginning
+    for (let i = (segments[0] === 'RootModel' ? 1 : 0); i < segments.length; i++) {
       if (current === null || current === undefined) {
         return undefined;
       }
       
-      if (/^\d+$/.test(part)) {
-        const index = parseInt(part, 10);
-        if (Array.isArray(current) && index < current.length) {
-          current = current[index];
-        } else {
-          return undefined;
-        }
-      } else {
-        if (current.hasOwnProperty(part)) {
-          current = current[part];
-        } else {
-          return undefined;
+      const segment = segments[i];
+      current = current[segment];
+      
+      // Check if we need to access an array element
+      if (indices.length > indexCounter && current !== null && current !== undefined) {
+        if (Array.isArray(current)) {
+          const index = indices[indexCounter];
+          indexCounter++;
+          
+          if (index < current.length) {
+            current = current[index];
+          } else {
+            return undefined; // Index out of bounds
+          }
         }
       }
     }
+    
     return current;
   }
   
   /**
-   * Set a value at a path in an object
+   * Set a value at a standardized object path in an object
    * @param {Object} obj - The object to set the value in
-   * @param {string} path - The path to set the value at
+   * @param {string} path - The standardized path to set the value at
    * @param {*} value - The value to set
    * @returns {boolean} True if the value was set successfully, false otherwise
    */
-  static setValueAtPath(obj, path, value) {
+  static setValueAtObjectPath(obj, path, value) {
     if (!obj || !path) return false;
     
-    // Normalize path by removing RootModel prefix if present
-    path = this._normalizePath(path);
+    // Normalize and parse the path
+    const { segments, indices } = this.parseObjectPath(path);
     
-    // Handle array notation like Parameters[0].Value
-    // Convert to dot notation: Parameters.0.Value
-    const normalizedPath = path.replace(/\[(\d+)\]/g, '.$1');
-    
-    const parts = normalizedPath.split('.');
-    const lastPart = parts.pop();
+    // Get the parent object where we need to set the value
     let current = obj;
+    let indexCounter = 0;
+    let targetObj = null;
+    let targetProperty = null;
     
-    // Navigate to the parent object
-    for (const part of parts) {
+    // Skip 'RootModel' at the beginning
+    for (let i = (segments[0] === 'RootModel' ? 1 : 0); i < segments.length - 1; i++) {
       if (current === null || current === undefined) {
         return false;
       }
       
-      if (/^\d+$/.test(part)) {
-        const index = parseInt(part, 10);
-        if (Array.isArray(current) && index < current.length) {
-          current = current[index];
-        } else {
-          return false;
-        }
-      } else {
-        if (current.hasOwnProperty(part)) {
-          current = current[part];
-        } else {
-          return false;
+      const segment = segments[i];
+      current = current[segment];
+      
+      // Navigate through array if needed
+      if (indices.length > indexCounter && current !== null && current !== undefined) {
+        if (Array.isArray(current)) {
+          const index = indices[indexCounter];
+          indexCounter++;
+          
+          if (index < current.length) {
+            current = current[index];
+          } else {
+            return false; // Index out of bounds
+          }
         }
       }
     }
     
-    // Set the value on the parent object
-    if (current !== null && current !== undefined) {
-      // Handle numeric array index in the last part
-      if (/^\d+$/.test(lastPart)) {
-        const index = parseInt(lastPart, 10);
-        if (Array.isArray(current) && index < current.length) {
-          current[index] = value;
-          return true;
-        }
-      } else {
-        current[lastPart] = value;
+    // At this point, current is the parent object and segments[segments.length - 1] is the property
+    if (current === null || current === undefined) {
+      return false;
+    }
+    
+    targetObj = current;
+    targetProperty = segments[segments.length - 1];
+    
+    // Check if we need to set the value in an array
+    if (indices.length > indexCounter && Array.isArray(targetObj[targetProperty])) {
+      const index = indices[indexCounter];
+      if (index < targetObj[targetProperty].length) {
+        targetObj[targetProperty][index] = value;
         return true;
       }
+      return false; // Index out of bounds
+    } else {
+      // Set the value directly
+      targetObj[targetProperty] = value;
+      return true;
     }
-    
-    return false;
   }
   
   /**
-   * Get the UID of an object from a path
+   * Get the UID of an object from a standardized object path
    * @param {Object} rootInstance - The root model instance
-   * @param {string} path - The path to the object
+   * @param {string} path - The standardized path to the object
    * @returns {number|null} The UID of the object or null if not found
    */
-  static getUidFromPath(rootInstance, path) {
+  static getUidFromObjectPath(rootInstance, path) {
     if (!rootInstance || !path) return null;
     
-    // Normalize path by removing RootModel prefix if present
-    path = this._normalizePath(path);
+    // Get the target object using our standardized path utilities
+    const targetObj = this.getValueFromObjectPath(rootInstance, path);
     
-    const { collectionName, index } = this.parsePath(path);
-    
-    if (collectionName && index !== undefined && index !== null) {
-      if (rootInstance[collectionName] && 
-          Array.isArray(rootInstance[collectionName]) && 
-          rootInstance[collectionName][index]) {
-        return rootInstance[collectionName][index]._uid || null;
-      }
+    // If the object exists and has a UID property, return it
+    if (targetObj && targetObj._uid !== undefined) {
+      return targetObj._uid;
     }
     
     return null;

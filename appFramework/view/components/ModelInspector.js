@@ -1,5 +1,6 @@
 import { BaseComponent } from './BaseComponent.js';
 import { TreeTable } from '../widgets/TreeTable.js';
+import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
 
 /**
  * ModelInspector component for displaying a tree view of the model using TreeTable
@@ -134,13 +135,13 @@ export class ModelInspector extends BaseComponent {
      * @param {string} type - The data type
      */
     customNodeRenderer(row, node, path, level, type) {
-        // Extract the node name from the path
-        let nodeName = path;
-        if (path.includes('.')) {
-            nodeName = path.split('.').pop();
-        } else if (path.includes('[')) {
-            nodeName = path.match(/\[([^\]]+)\]$/)?.[0] || path;
-        }
+        // Extract the node name from the path using standardized path utilities
+        // No fallbacks - path must be valid and parsable by ModelPathUtils
+        const { segments } = ModelPathUtils.parseObjectPath(path);
+        
+        // Get the last segment as the node name
+        // If no segments exist or path is invalid, this is a structural error that should be fixed at the source
+        const nodeName = segments[segments.length - 1] || path;
 
         // Create name cell with proper indentation
         const nameCell = document.createElement('td');
@@ -195,24 +196,13 @@ export class ModelInspector extends BaseComponent {
         }
         
         try {
-            // Get the updated value from the model using the path
-            let value = model;
-            const pathParts = path.split('.');
+            // Get the updated value from the model using the standardized path utilities
+            // No fallbacks - path must be valid and parsable by ModelPathUtils
+            const value = ModelPathUtils.getValueFromObjectPath(model, path);
             
-            for (const part of pathParts) {
-                if (part.includes('[') && part.includes(']')) {
-                    // Handle array index notation [index]
-                    const arrayName = part.split('[')[0];
-                    const indexMatch = part.match(/\[(\d+)\]/);
-                    if (indexMatch && indexMatch[1]) {
-                        const index = parseInt(indexMatch[1], 10);
-                        value = arrayName ? value[arrayName][index] : value[index];
-                    }
-                } else {
-                    value = value[part];
-                }
-                
-                if (value === undefined) break;
+            // If value is undefined, this is an error that should be fixed at the source
+            if (value === undefined) {
+                throw new Error(`Value not found for path: ${path}`);
             }
             
             // Get the type of the value

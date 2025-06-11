@@ -13,21 +13,68 @@ export class Binding {
    * @param {Object} options - The binding options
    * @param {Object} options.model - The model object
    * @param {string} options.path - The property path in the model
-   * @param {HTMLElement} options.element - The DOM element to bind to
-   * @param {string} [options.attribute='value'] - The attribute to bind to
+   * @param {HTMLElement} options.view - The DOM element to bind to (view element)
+   * @param {string} [options.viewAttribute='value'] - The attribute to bind to
    * @param {Function} [options.parser=identity] - Function to parse value from string
    * @param {Function} [options.formatter=identity] - Function to format value to string
    * @param {Object} options.eventManager - The event manager instance
    * @param {Object} [options.events] - Custom event types
    */
   constructor(options) {
-    if (!options || options.path === undefined || !options.element || !options.eventManager) {
+    // Validate required options
+    if (!options || !options.view || !options.eventManager) {
       throw new Error('Missing required binding options');
     }
     
-    this.path = options.path;
-    this.element = options.element;
-    this.attribute = options.attribute || 'value';
+    this.view = options.view;
+    
+    // Require either (objectPath + property) or path
+    const hasObjectPathAndProperty = options.objectPath !== undefined && options.property !== undefined;
+    const hasPath = options.path !== undefined;
+    
+    if (!hasObjectPathAndProperty && !hasPath) {
+      throw new Error('Binding must have either (objectPath + property) or path');
+    }
+    
+    // If explicit objectPath and property are provided, use those directly
+    if (hasObjectPathAndProperty) {
+      this.objectPath = options.objectPath;
+      this.property = options.property;
+      console.debug(`Binding created with explicit objectPath: ${this.objectPath}, property: ${this.property}`);
+    } else {
+      // Otherwise parse the path to separate object path from property
+      console.debug(`Parsing binding path: ${options.path}`);
+      const { segments, indices } = ModelPathUtils.parseObjectPath(options.path);
+      
+      if (segments.length === 0) {
+        throw new Error(`Invalid path: ${options.path} - no segments found`);
+      }
+      
+      // The last segment is the property name
+      this.property = segments[segments.length - 1];
+      
+      if (segments.length === 1) {
+        // If there's only one segment, objectPath is empty
+        this.objectPath = '';
+      } else {
+        // Build the object path from all segments except the last one
+        const segmentsExceptLast = segments.slice(0, -1);
+        const relevantIndices = [];
+        
+        // Find all indices that apply to the segments we're keeping
+        for (const idx of indices) {
+          if (idx.segmentIndex < segmentsExceptLast.length) {
+            relevantIndices.push(idx);
+          }
+        }
+        
+        this.objectPath = ModelPathUtils.createObjectPath(segmentsExceptLast, relevantIndices);
+      }
+      
+      console.debug(`Binding path parsed to objectPath: ${this.objectPath}, property: ${this.property}`);
+    }
+    
+    this.viewAttribute = options.viewAttribute || 'value';
     this.parser = options.parser || (value => value);
     this.formatter = options.formatter || (value => value);
     this.eventManager = options.eventManager;
@@ -65,9 +112,9 @@ export class Binding {
     // Listen for changes on the view element - simple approach with no removeEventListener
     try {
       // Add the event listener directly - no removeEventListener to avoid registration issues
-      this.element.addEventListener(this.events.view, this._boundHandleViewChange);
+      this.view.addEventListener(this.events.view, this._boundHandleViewChange);
       // Store a reference to the binding on the element for debugging
-      this.element.__binding = this;
+      this.view.__binding = this;
     } catch (error) {
       console.error(`Error setting up view event listener for ${this.path}:`, error);
     }
@@ -87,12 +134,12 @@ export class Binding {
     
     // Get the value from the element based on the attribute
     let value;
-    if (this.attribute === 'value') {
-      value = this.element.value;
-    } else if (this.attribute === 'checked') {
-      value = this.element.checked;
+    if (this.viewAttribute === 'value') {
+      value = this.view.value;
+    } else if (this.viewAttribute === 'checked') {
+      value = this.view.checked;
     } else {
-      value = this.element[this.attribute] || this.element.getAttribute(this.attribute);
+      value = this.view[this.viewAttribute] || this.view.getAttribute(this.viewAttribute);
     }
     
     // Parse the value using the provided parser
@@ -103,13 +150,30 @@ export class Binding {
   }
   
   /**
-   * Handle changes from the model
+   * Handle model property changed events
    * @param {Object} event - The model change event
    * @private
    */
   handleModelChange(event) {
-    // Only update if the changed property matches our path
-    if (event.Path === this.path) {
+    // TODO: This is a bandaid fix. The proper solution is to ensure all binding
+    // objectPaths are consistently created with the RootModel prefix throughout the codebase.
+    
+    // Normalize paths by removing RootModel prefix for comparison
+    let eventPath = event.ObjectPath;
+    let bindingPath = this.objectPath;
+    
+    // Strip RootModel prefix from event path if present
+    if (eventPath && eventPath.startsWith('RootModel.')) {
+      eventPath = eventPath.substring(10); // Remove 'RootModel.'
+    }
+    
+    // Strip RootModel prefix from binding path if present
+    if (bindingPath && bindingPath.startsWith('RootModel.')) {
+      bindingPath = bindingPath.substring(10); // Remove 'RootModel.'
+    }
+    
+    // Check if the changed property matches our binding using objectPath+property
+    if (eventPath === bindingPath && event.Property === this.property) {
       try {
         // Set the flag to prevent view change events from triggering model updates
         this._isUpdatingFromModel = true;
@@ -132,48 +196,37 @@ export class Binding {
     let value;
     
     if (valueFromEvent !== undefined) {
-      // Use the value provided in the event
       value = valueFromEvent;
     } else {
-      // Get the app from the eventManager
-      const app = this.eventManager._owner;
-      if (!app) {
-        console.error('Cannot update view: No app available through eventManager');
-        return;
-      }
-      
-      // Get the model from the app
-      const model = app.getModel();
+      // Get the model from the event manager
+      const model = this.eventManager.getModel();
       if (!model) {
-        console.error('Cannot update view: No model available from app');
+        console.warn('No model available for binding update');
         return;
       }
       
-      // Get the root instance from the model
-      const rootInstance = model.getRootInstance();
-      
-      // Get the value from the path
-      value = ModelPathUtils.getValueFromPath(rootInstance, this.path);
+      // Get the value from the model
+      value = this.getValueFromModel(model);
     }
     
     // Format the value for display
     const formattedValue = this.formatter(value);
     
     // Update the element
-    if (this.attribute === 'value') {
-      this.element.value = formattedValue;
-    } else if (this.attribute === 'checked') {
-      this.element.checked = formattedValue;
-    } else if (this.attribute === 'textContent') {
-      this.element.textContent = formattedValue;
-    } else if (this.attribute === 'innerHTML') {
-      this.element.innerHTML = formattedValue;
+    if (this.viewAttribute === 'value') {
+      this.view.value = formattedValue;
+    } else if (this.viewAttribute === 'checked') {
+      this.view.checked = formattedValue;
+    } else if (this.viewAttribute === 'textContent') {
+      this.view.textContent = formattedValue;
+    } else if (this.viewAttribute === 'innerHTML') {
+      this.view.innerHTML = formattedValue;
     } else {
       // For other attributes, try both property and attribute setting
       try {
-        this.element[this.attribute] = formattedValue;
+        this.view[this.viewAttribute] = formattedValue;
       } catch (e) {
-        this.element.setAttribute(this.attribute, formattedValue);
+        this.view.setAttribute(this.viewAttribute, formattedValue);
       }
     }
   }
@@ -186,25 +239,29 @@ export class Binding {
    */
   _determineViewEvent(options) {
     // If explicitly specified in options, use that
+    if (options.viewEvent) {
+      return options.viewEvent;
+    }
+    
+    // If specified in events object, use that
     if (options.events && options.events.view) {
       return options.events.view;
     }
     
-    const element = options.element;
-    const attribute = options.attribute || 'value';
+    const view = options.view;
     
     // For checkboxes, use 'change' event instead of 'input'
-    if (element.tagName === 'INPUT' && element.type === 'checkbox') {
+    if (view.tagName === 'INPUT' && view.type === 'checkbox') {
       return 'change';
     }
     
     // For select elements, use 'change' event
-    if (element.tagName === 'SELECT') {
+    if (view.tagName === 'SELECT') {
       return 'change';
     }
     
     // For radio buttons, use 'change' event
-    if (element.tagName === 'INPUT' && element.type === 'radio') {
+    if (view.tagName === 'INPUT' && view.type === 'radio') {
       return 'change';
     }
     
@@ -221,26 +278,22 @@ export class Binding {
     // If we're currently updating from a model change, don't dispatch view-to-model events
     // This prevents infinite update loops
     if (this._isUpdatingFromModel) {
-      console.log(`Skipping model update for path ${this.path} during view update`);
+      console.log(`Skipping model update for ${this.objectPath}.${this.property} during view update`);
       return;
     }
     
-    console.log(`Binding requesting model update for path ${this.path} with value:`, value);
+    console.log(`Binding requesting model update for ${this.objectPath}.${this.property} with value:`, value);
     
-    // Dispatch a view-to-model change event
-    // The ClientModel will handle updating the model and dispatching MODEL_TO_VIEW_PROPERTY_CHANGED
+    // Dispatch a view-to-model change event with objectPath and property fields
     this.eventManager.dispatchEvent(EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, {
-      path: this.path,
-      value: value,
+      // Use camelCase as required by EventTypes.js for this event
+      objectPath: this.objectPath, // Object path without property
+      property: this.property,     // Property name only
+      // Include path for backward compatibility as required by EventTypes.js schema
+      path: `${this.objectPath}.${this.property}`,
+      value: value,                
       source: 'binding'
     });
-  }
-  
-  /**
-   * Refresh the binding (update view from model)
-   */
-  refresh() {
-    this._updateViewFromModel();
   }
   
   /**
@@ -254,18 +307,18 @@ export class Binding {
    * Clean up the binding and remove event listeners
    */
   destroy() {
-    console.log(`Destroying binding for ${this.path}`);
+    console.log(`Destroying binding for ${this.objectPath}.${this.property}`);
     
     try {
       // Remove view event listener
-      if (this.element && this._boundHandleViewChange) {
-        this.element.removeEventListener(this.events.view, this._boundHandleViewChange);
+      if (this.view && this._boundHandleViewChange) {
+        this.view.removeEventListener(this.events.view, this._boundHandleViewChange);
         console.log(`Removed view event listener for ${this.events.view}`);
       }
       
       // Remove binding reference from element
-      if (this.element && this.element.__binding) {
-        delete this.element.__binding;
+      if (this.view && this.view.__binding) {
+        delete this.view.__binding;
         console.log(`Removed binding reference from element`);
       }
       
@@ -280,7 +333,7 @@ export class Binding {
       // Clear all references
       this._boundHandleViewChange = null;
       this._boundHandleModelChange = null;
-      this.element = null;
+      this.view = null;
       this.eventManager = null;
     } catch (error) {
       console.error('Error destroying binding:', error);

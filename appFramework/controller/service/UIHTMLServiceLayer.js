@@ -120,6 +120,16 @@ export class UIHTMLServiceLayer extends ServiceLayer {
     }
     
     /**
+     * Check if MATLAB is connected
+     * @returns {boolean} True if connected to real MATLAB, false if using MockMATLABComponent
+     */
+    isMATLABConnected() {
+        // Check if component exists and is not a mock
+        return this._htmlComponent && 
+               !this._htmlComponent.isMock;
+    }
+    
+    /**
      * Handles MATLAB method call requests from the application
      * @param {Object} event - The event object containing request details
      */
@@ -186,9 +196,30 @@ export class UIHTMLServiceLayer extends ServiceLayer {
         };
         
         try {
-            // Send the event to MATLAB
-            this._htmlComponent.sendEventToMATLAB('matlab_method_call_request', eventData);
-            console.log(`Sent MATLAB method call request: ${MethodName} (ID: ${requestId})`);
+            // Check if we're connected to MATLAB
+            if (this.isMATLABConnected()) {
+                // Send the event to MATLAB
+                this._htmlComponent.sendEventToMATLAB('matlab_method_call_request', eventData);
+                console.log(`Sent MATLAB method call request: ${MethodName} (ID: ${requestId})`);
+            } else {
+                console.log(`MATLAB is not connected. Method call request ${MethodName} (ID: ${requestId}) not sent.`);
+                
+                // Clean up pending call
+                this._pendingCalls.delete(requestId);
+                
+                // Execute callback with mock response if one is provided
+                if (typeof Callback === 'function') {
+                    setTimeout(() => {
+                        try {
+                            Callback({ success: false, message: 'MATLAB is not connected', result: null });
+                        } catch (callbackError) {
+                            console.warn(`Error executing callback for mock response:`, callbackError);
+                        }
+                    }, 0);
+                }
+                
+                return; // Exit early, don't throw an error
+            }
         } catch (error) {
             // Execute error callback if provided
             if (typeof ErrorCallback === 'function') {

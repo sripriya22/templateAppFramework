@@ -265,7 +265,7 @@ export class ModelPanel extends BaseComponent {
         
         sortedProperties.forEach(propConfig => {
             // Get property value from model
-            const value = ModelPathUtils.getValueFromPath(model, propConfig.PropertyPath);
+            const value = ModelPathUtils.getValueFromObjectPath(model, propConfig.PropertyPath);
             
             // Get property definition from model class
             const propDef = this._getPropertyDefinition(model._className, propConfig.PropertyPath);
@@ -288,7 +288,7 @@ export class ModelPanel extends BaseComponent {
      */
     _createConfiguredField(model, propPath, propConfig, container) {
         // Get the property value using ModelPathUtils
-        const value = ModelPathUtils.getValueFromPath(model, propPath);
+        const value = ModelPathUtils.getValueFromObjectPath(model, propPath);
         
         // Create a form group div
         const formGroup = document.createElement('div');
@@ -311,6 +311,11 @@ export class ModelPanel extends BaseComponent {
         
         const isEditable = propConfig.Editable !== false;
         
+        // Extract objectPath and property from propPath
+        const pathParts = propPath.split('.');
+        const property = pathParts.pop();
+        const objectPath = pathParts.length > 0 ? pathParts.join('.') : '';
+        
         // For non-editable fields (except checkboxes), create a span instead of an input
         if (!isEditable && widgetType !== 'checkbox') {
             input = document.createElement('span');
@@ -318,12 +323,16 @@ export class ModelPanel extends BaseComponent {
             input.textContent = value !== undefined && value !== null ? value : '';
             
             // We still create a binding for non-editable fields to update the display
-            this.createBinding({
-                model: model,
-                path: propPath,
-                element: input,
-                attribute: 'textContent'
-            });
+            const app = this._view.getApp();
+            if (app) {
+                app.bindingManager.createBinding({
+                    view: input,
+                    viewAttribute: 'textContent',
+                    objectPath: objectPath,
+                    property: property,
+                    formatter: val => val || ''
+                });
+            }
         } else {
             // For editable fields or checkboxes, create the appropriate input
             switch (widgetType) {
@@ -334,123 +343,134 @@ export class ModelPanel extends BaseComponent {
                     input.checked = Boolean(value);
                     
                     // Create binding for checkbox
-                
-                // Create binding for checkbox
-                this.createBinding({
-                    model: model,
-                    path: propPath,
-                    element: input,
-                    attribute: 'checked',
-                    events: {
-                        view: 'change' // Use 'change' event for checkboxes
-                    },
-                    parser: val => Boolean(val)
-                });
-                break;
-                
-            case 'number':
-                input = document.createElement('input');
-                input.type = 'number';
-                input.className = 'form-control';
-                input.value = value !== undefined && value !== null ? value : '';
-                
-                // Add min/max/step if specified
-                if (propDef.Min !== undefined) input.min = propDef.Min;
-                if (propDef.Max !== undefined) input.max = propDef.Max;
-                if (propDef.Step !== undefined) input.step = propDef.Step;
-                if (propConfig.min !== undefined) input.min = propConfig.min;
-                if (propConfig.max !== undefined) input.max = propConfig.max;
-                if (propConfig.step !== undefined) input.step = propConfig.step;
-                
-                // Create binding for number input
-                this.createBinding({
-                    model: model,
-                    path: propPath,
-                    element: input,
-                    parser: (val) => parseFloat(val)
-                });
-                break;
-                
-            case 'select':
-                input = document.createElement('select');
-                input.className = 'form-control';
-                
-                // Add options
-                if (propConfig.options) {
-                    propConfig.options.forEach(option => {
-                        const optionEl = document.createElement('option');
-                        optionEl.value = option.value;
-                        optionEl.textContent = option.label || option.value;
-                        if (option.value === value) {
-                            optionEl.selected = true;
-                        }
-                        input.appendChild(optionEl);
-                    });
-                }
-                
-                // Create binding for select
-                this.createBinding({
-                    model: model,
-                    path: propPath,
-                    element: input
-                });
-                break;
-                
-            case 'textarea':
-                input = document.createElement('textarea');
-                input.className = 'form-control';
-                input.value = value !== undefined && value !== null ? value : '';
-                
-                // Add rows if specified
-                if (propConfig.rows) input.rows = propConfig.rows;
-                
-                // Create binding for textarea
-                this.createBinding({
-                    model: model,
-                    path: propPath,
-                    element: input
-                });
-                break;
-                
-            case 'text':
-            default:
-                input = document.createElement('input');
-                input.type = 'text';
-                input.className = 'form-control';
-                input.value = value !== undefined && value !== null ? value : '';
-                
-                // Create binding for text input
-                this.createBinding({
-                    model: model,
-                    path: propPath,
-                    element: input
-                });
-                break;
+                    const app = this._view.getApp();
+                    if (app) {
+                        app.bindingManager.createBinding({
+                            view: input,
+                            viewAttribute: 'checked',
+                            viewEvent: 'change',
+                            objectPath: objectPath,
+                            property: property,
+                            parser: val => Boolean(val),
+                            formatter: val => Boolean(val)
+                        });
+                    }
+                    break;
+                    
+                case 'number':
+                    input = document.createElement('input');
+                    input.type = 'number';
+                    input.className = 'form-control';
+                    input.value = value !== undefined && value !== null ? value : '';
+                    
+                    // Add min/max/step if specified
+                    if (propDef && propDef.Min !== undefined) input.min = propDef.Min;
+                    if (propDef && propDef.Max !== undefined) input.max = propDef.Max;
+                    if (propDef && propDef.Step !== undefined) input.step = propDef.Step;
+                    if (propConfig.min !== undefined) input.min = propConfig.min;
+                    if (propConfig.max !== undefined) input.max = propConfig.max;
+                    if (propConfig.step !== undefined) input.step = propConfig.step;
+                    
+                    // Create binding for number input
+                    const numApp = this._view.getApp();
+                    if (numApp) {
+                        numApp.bindingManager.createBinding({
+                            view: input,
+                            viewAttribute: 'value',
+                            viewEvent: 'change',
+                            objectPath: objectPath,
+                            property: property,
+                            parser: val => {
+                                const num = parseFloat(val);
+                                return isNaN(num) ? 0 : num;
+                            },
+                            formatter: val => val !== undefined && val !== null ? val.toString() : ''
+                        });
+                    }
+                    break;
+                    
+                case 'select':
+                    input = document.createElement('select');
+                    input.className = 'form-control';
+                    
+                    // Add options
+                    if (propConfig.options) {
+                        propConfig.options.forEach(option => {
+                            const optionEl = document.createElement('option');
+                            optionEl.value = option.value;
+                            optionEl.textContent = option.label || option.value;
+                            if (option.value === value) {
+                                optionEl.selected = true;
+                            }
+                            input.appendChild(optionEl);
+                        });
+                    }
+                    
+                    // Create binding for select input
+                    const selectApp = this._view.getApp();
+                    if (selectApp) {
+                        selectApp.bindingManager.createBinding({
+                            view: input,
+                            viewAttribute: 'value',
+                            viewEvent: 'change',
+                            objectPath: objectPath,
+                            property: property
+                        });
+                    }
+                    break;
+                    
+                case 'textarea':
+                    input = document.createElement('textarea');
+                    input.className = 'form-control';
+                    input.value = value !== undefined && value !== null ? value : '';
+                    
+                    // Create binding for textarea
+                    const textareaApp = this._view.getApp();
+                    if (textareaApp) {
+                        textareaApp.bindingManager.createBinding({
+                            view: input,
+                            viewAttribute: 'value',
+                            viewEvent: 'change',
+                            objectPath: objectPath,
+                            property: property,
+                            formatter: val => val || ''
+                        });
+                    }
+                    break;
+                    
+                default:
+                    // Default to text input
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'form-control';
+                    input.value = value !== undefined && value !== null ? value : '';
+                    
+                    // Create binding for text input
+                    const defaultApp = this._view.getApp();
+                    if (defaultApp) {
+                        defaultApp.bindingManager.createBinding({
+                            view: input,
+                            viewAttribute: 'value',
+                            viewEvent: 'change',
+                            objectPath: objectPath,
+                            property: property,
+                            formatter: val => val !== undefined && val !== null ? val.toString() : ''
+                        });
+                    }
             }
         }
         
-        // Add placeholder if specified
-        if (propConfig.placeholder && input.placeholder !== undefined) {
-            input.placeholder = propConfig.placeholder;
+        // Add any additional attributes from propConfig
+        if (propConfig.attributes) {
+            for (const [attr, val] of Object.entries(propConfig.attributes)) {
+                input.setAttribute(attr, val);
+            }
         }
         
-        // Add readonly if specified
-        if (propConfig.readonly) {
-            input.readOnly = true;
-        }
-        
-        // Add the input to the form group
+        // Add input to form group
         formGroup.appendChild(input);
         
-        // Add help text if specified
-        if (propConfig.help) {
-            const helpText = document.createElement('small');
-            helpText.className = 'form-text text-muted';
-            helpText.textContent = propConfig.help;
-            formGroup.appendChild(helpText);
-        }
-        
-        // Add the form group to the container
+        // Add form group to container
         container.appendChild(formGroup);
     }
     
@@ -584,7 +604,7 @@ export class ModelPanel extends BaseComponent {
      */
     _createArraySection(arrayConfig, model) {
         // Get array from model
-        const array = ModelPathUtils.getValueFromPath(model, arrayConfig.PropertyPath);
+        const array = ModelPathUtils.getValueFromObjectPath(model, arrayConfig.PropertyPath);
         
         if (!array || !Array.isArray(array)) {
             console.warn(`Property ${arrayConfig.PropertyPath} is not an array or doesn't exist`);
@@ -619,6 +639,14 @@ export class ModelPanel extends BaseComponent {
         const displayProps = arrayConfig.DisplayProperties || [];
         displayProps.sort((a, b) => (a.Order || 0) - (b.Order || 0));
         
+        // Optional index column
+        if (arrayConfig.ShowIndex !== false) {
+            const indexTh = document.createElement('th');
+            indexTh.textContent = arrayConfig.IndexHeader || '#';
+            indexTh.className = 'array-index-column';
+            headerRow.appendChild(indexTh);
+        }
+        
         displayProps.forEach(propConfig => {
             const th = document.createElement('th');
             th.textContent = propConfig.Label || this.formatLabel(propConfig.PropertyPath);
@@ -645,6 +673,14 @@ export class ModelPanel extends BaseComponent {
         // Add rows for each item
         array.forEach((item, index) => {
             const row = document.createElement('tr');
+            
+            // Optional index column
+            if (arrayConfig.ShowIndex !== false) {
+                const indexCell = document.createElement('td');
+                indexCell.textContent = (index + 1).toString();
+                indexCell.className = 'array-index-column';
+                row.appendChild(indexCell);
+            }
             
             // Add cells for display properties
             displayProps.forEach(propConfig => {
@@ -685,8 +721,8 @@ export class ModelPanel extends BaseComponent {
                     if (app) {
                         const model = app.getModel();
                         if (model) {
-                            // Create path to this array item property
-                            const itemPath = `${arrayConfig.PropertyPath}[${index}].${propName}`;
+                            // Create object path to this array item property
+                            const itemObjectPath = `${arrayConfig.PropertyPath}[${index}]`;
                             
                             // Determine the appropriate attribute based on widget type
                             let attribute = 'value';
@@ -700,36 +736,29 @@ export class ModelPanel extends BaseComponent {
                             if (widget.type === 'checkbox') {
                                 parser = val => Boolean(val);
                                 formatter = val => Boolean(val);
+                                viewEvent = 'change';
                             } else if (widget.type === 'number' || typeof value === 'number') {
                                 parser = val => {
-                                    if (val === '') return 0;
                                     const num = parseFloat(val);
                                     return isNaN(num) ? 0 : num;
                                 };
-                                formatter = val => (val === undefined || val === null) ? '' : val.toString();
-                                formatter = val => {
-                                    if (val === undefined || val === null) return '';
-                                    return val.toString();
-                                };
-                                
-                                // For numeric inputs, use 'change' event instead of 'input'
-                                // This ensures we only update the model when the user completes their edit
-                                // and not on every keystroke
+                                formatter = val => val;
                                 viewEvent = 'change';
                             } else {
-                                // Default identity functions for other types
                                 parser = val => val;
-                                formatter = val => val !== undefined && val !== null ? val.toString() : '';
+                                formatter = val => val || '';
+                                viewEvent = 'change';
                             }
                             
-                            this.createBinding({
-                                model: model,
-                                path: itemPath,
-                                element: widget,
-                                attribute: attribute,
+                            // Create binding with objectPath and property separate
+                            app.bindingManager.createBinding({
+                                view: widget,
+                                viewAttribute: attribute,
+                                viewEvent: viewEvent,
+                                objectPath: itemObjectPath,
+                                property: propName,
                                 parser: parser,
-                                formatter: formatter,
-                                events: viewEvent ? { view: viewEvent } : undefined
+                                formatter: formatter
                             });
                         }
                     }
@@ -742,7 +771,7 @@ export class ModelPanel extends BaseComponent {
         table.appendChild(tbody);
         tableWrapper.appendChild(table);
         
-        // Add to form container
+        // Add to DOM
         this.formElement.appendChild(container);
     }
     
@@ -1012,10 +1041,16 @@ export class ModelPanel extends BaseComponent {
                 const model = app.getModel();
                 if (model) {
                     
+                    // Extract objectPath and property from propertyPath for field
+                    const fieldPathParts = propertyPath.split('.');
+                    const fieldProperty = fieldPathParts.pop();
+                    const fieldObjectPath = fieldPathParts.length > 0 ? fieldPathParts.join('.') : '';
+                    
                     // Create binding for this input
                     this.createBinding({
                         model: model,
-                        path: propertyPath,
+                        objectPath: fieldObjectPath,
+                        property: fieldProperty,
                         element: input,
                         attribute: type === 'boolean' ? 'checked' : 'value',
                         events: {

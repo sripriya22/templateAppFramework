@@ -30,7 +30,7 @@ classdef RootModel < server.model.BaseObject
         end
     
     methods
-        function path = getPathFromUid(obj, uid, propertyName)
+        function path = getPathFromUid(obj, uid)
             % GETPATHFROMUID Convert a UID to a binding path
             %   Traverses the model to find the object with the given UID and returns
             %   its path in the format used by the binding framework
@@ -50,11 +50,6 @@ classdef RootModel < server.model.BaseObject
                 % If path not found, fall back to using the UID directly
                 warning('Could not find path for object with UID %s', uid);
                 path = uid;
-            end
-            
-            % Append the property name to the path if provided
-            if nargin > 2 && ~isempty(propertyName)
-                path = sprintf('%s.%s', path, propertyName);
             end
         end
         

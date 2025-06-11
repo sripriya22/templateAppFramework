@@ -28,6 +28,8 @@ export class BaseComponent {
      * @param {Object} options - Binding options
      * @param {Object} options.model - The model object to bind to
      * @param {string} options.path - The path to the model property
+     * @param {string} [options.objectPath] - The path to the object containing the property (if using separate objectPath and property)
+     * @param {string} [options.property] - The property name (if using separate objectPath and property)
      * @param {HTMLElement} options.element - The DOM element to bind to
      * @param {string} [options.attribute='value'] - The element attribute to bind to
      * @param {Function} [options.formatter] - Optional formatter function
@@ -94,7 +96,7 @@ export class BaseComponent {
         const binding = bindingManager.createComponentBinding({
             model: model,
             path: '', // Root path to listen for all changes
-            element: this.element,
+            view: this.element,
             updateCallback: updateCallback,
             component: this
         });

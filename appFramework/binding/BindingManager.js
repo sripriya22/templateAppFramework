@@ -1,5 +1,5 @@
 /**
- * BindingManager - Class to manage bindings between model properties and view elements
+ * BindingManager - Class to manage all bindings in the application
  */
 import { Binding } from './Binding.js';
 import { ComponentBinding } from './ComponentBinding.js';
@@ -35,7 +35,9 @@ export class BindingManager {
   /**
    * Create a new binding
    * @param {Object} options - Binding options
-   * @param {string} options.path - The path to the model property
+   * @param {string} options.path - The path to the model property (must be in standardized format or parseable by ModelPathUtils)
+   * @param {string} [options.objectPath] - The path to the object containing the property
+   * @param {string} [options.property] - The name of the property
    * @param {HTMLElement} options.element - The DOM element to bind to
    * @param {string} [options.attribute='value'] - The element attribute to bind to
    * @param {Function} [options.formatter] - Optional formatter function
@@ -50,14 +52,14 @@ export class BindingManager {
       eventManager: this.eventManager
     };
     
-    // Create the binding
+    // Create the binding - Binding constructor will standardize the path
     const binding = new Binding(bindingOptions);
     
     // Store the binding
     this.bindings.push(binding);
     
     // Log binding creation
-    console.log(`Created binding for ${options.path} to element`, options.element);
+    console.log(`Created binding for ${binding.path} to element`, options.element);
     
     return binding;
   }
@@ -160,76 +162,9 @@ export class BindingManager {
   }
   
   /**
-   * Get all bindings for a specific model path
-   * @param {string} path - The model path to get bindings for
-   * @returns {Binding[]} Array of bindings for the path
+   * Note: getBindingsForPath has been deprecated and removed in favor of getBindingsForObjectPathProperty
+   * Direct binding matching is now done using objectPath and property fields separately
    */
-  getBindingsForPath(path) {
-    // Normalize the path by removing RootModel prefix if present
-    const normalizedPath = this._normalizePathForBinding(path);
-    
-    return this.bindings.filter(binding => {
-      // Normalize the binding path as well
-      const normalizedBindingPath = this._normalizePathForBinding(binding.path);
-      
-      // Match bindings with the exact path (after normalization)
-      if (normalizedBindingPath === normalizedPath) {
-        return true;
-      }
-      
-      // Match component bindings with empty path (these should be notified of all changes)
-      if (binding instanceof ComponentBinding && binding.path === '') {
-        return true;
-      }
-      
-      // Handle array paths - match array items when the array itself changes
-      // For example, if path is 'items', match 'items[0].name', 'items[1].age', etc.
-      if (normalizedPath && normalizedBindingPath && normalizedBindingPath.startsWith(normalizedPath + '[')) {
-        return true;
-      }
-      
-      // Handle array item changes - match specific array items
-      // For example, if path is 'items[0].name', match that specific binding
-      if (normalizedPath && normalizedBindingPath) {
-        // Extract the array path and index from the changed path
-        const arrayMatch = normalizedPath.match(/^(.+?)\[(\d+)\](.*)$/);
-        if (arrayMatch) {
-          const [, arrayPath, index, remainder] = arrayMatch;
-          // Check if the binding path matches this array path pattern
-          const bindingArrayMatch = normalizedBindingPath.match(/^(.+?)\[(\d+)\](.*)$/);
-          if (bindingArrayMatch) {
-            const [, bindingArrayPath, bindingIndex, bindingRemainder] = bindingArrayMatch;
-            // If array paths match and indices match, and the remainder matches or is a prefix
-            if (arrayPath === bindingArrayPath && index === bindingIndex && 
-                (remainder === bindingRemainder || 
-                 (remainder && bindingRemainder && bindingRemainder.startsWith(remainder)))) {
-              return true;
-            }
-          }
-        }
-      }
-      
-      return false;
-    });
-  }
-  
-  /**
-   * Normalize a path for binding comparison by handling RootModel prefix
-   * @param {string} path - The path to normalize
-   * @returns {string} The normalized path
-   * @private
-   */
-  _normalizePathForBinding(path) {
-    if (!path) return path;
-    
-    // Remove RootModel prefix if present for binding comparison
-    // This allows bindings registered without the RootModel prefix to still match
-    if (path.startsWith('RootModel.')) {
-      return path.substring('RootModel.'.length);
-    }
-    
-    return path;
-  }
   
   /**
    * Destroy the binding manager and all bindings
@@ -245,33 +180,66 @@ export class BindingManager {
   // This maintains clearer separation of concerns with ClientModel managing all model state
   
   /**
+   * Get bindings that match a specific objectPath and property
+   * @param {string} objectPath - The path to the object (without the property)
+   * @param {string} property - The property name
+   * @returns {Binding[]} Array of matching bindings
+   */
+  getBindingsForObjectPathProperty(objectPath, property) {
+    // TODO: This is a bandaid fix. The proper solution is to ensure all binding
+    // objectPaths are consistently created with the RootModel prefix throughout the codebase.
+    // Technical debt: We should update all binding creation to use ModelPathUtils.createObjectPath
+    // with consistent RootModel prefixing.
+    
+    // Strip RootModel prefix for consistency with bindings that don't use it
+    let normalizedPath = objectPath;
+    if (normalizedPath.startsWith('RootModel.')) {
+      normalizedPath = normalizedPath.substring(10); // Remove 'RootModel.'
+    }
+    
+    return this.bindings.filter(binding => {
+      // Direct match on objectPath and property
+      if (binding.objectPath === normalizedPath && binding.property === property) {
+        return true;
+      }
+      
+      // Match component bindings with empty objectPath (these should be notified of all changes)
+      if (binding instanceof ComponentBinding && binding.objectPath === '') {
+        return true;
+      }
+      
+      // Handle array paths - match array items when the array itself changes
+      // For example, if objectPath is 'items', match 'items[0]' properties
+      if (normalizedPath && binding.objectPath && binding.objectPath.startsWith(normalizedPath + '[')) {
+        return true;
+      }
+      
+      return false;
+    });
+  }
+  
+  /**
    * Handle model-to-view property change events
    * @param {Object} eventData - The event data
    * @private
    */
   _handleModelToViewPropertyChanged(eventData) {
-    if (!eventData || !eventData.Path) {
+    if (!eventData || !eventData.ObjectPath || !eventData.Property) {
       console.error('Invalid event data in _handleModelToViewPropertyChanged:', eventData);
       return;
     }
     
-    // Extract path from eventData using PascalCase field name
-    const path = eventData.Path;
+    // Find bindings that match the ObjectPath and Property directly
+    const matchingBindings = this.getBindingsForObjectPathProperty(eventData.ObjectPath, eventData.Property);
     
-    // Find bindings that match the changed path
-    // TODO: we need to standardize the paths
-    const normalizedPath = this._normalizePathForBinding(path);
-    eventData.Path = normalizedPath;
-    const matchingBindings = this.getBindingsForPath(normalizedPath);    
-    
-    // Update regular bindings
+    // Update matching bindings
     if (matchingBindings.length > 0) {
-      console.log(`Updating ${matchingBindings.length} bindings for path ${path}`);
+      console.log(`Updating ${matchingBindings.length} bindings for ${eventData.ObjectPath}.${eventData.Property}`);
       matchingBindings.forEach(binding => {
         binding.handleModelChange(eventData);
       });
     } else {
-      console.debug(`No bindings found for path ${path}`);
+      console.debug(`No bindings found for ${eventData.ObjectPath}.${eventData.Property}`);
     }
   }
 }

@@ -328,9 +328,12 @@ export class ClientModel extends EventListener {
         return;
       }
       
-      // Construct the full path by combining object path and property name
-      //TODO: clean up path const fullPath = ObjectPath ? `${ObjectPath}.${PropertyName}` : PropertyName;
-      const fullPath = ObjectPath;
+      // Construct the full path using standardized utilities
+      // Server provides ObjectPath as the path to the object containing the property
+      // We need to create a standardized path including the PropertyName
+      const { segments, indices } = ModelPathUtils.parseObjectPath(ObjectPath);
+      const fullPathSegments = [...segments, PropertyName];
+      const fullPath = ModelPathUtils.createObjectPath(fullPathSegments, indices);
       
       // Get the root instance from the client model
       const rootInstance = this.getRootInstance();
@@ -339,8 +342,8 @@ export class ClientModel extends EventListener {
         return;
       }
       
-      // Get the current value for comparison
-      const oldValue = ModelPathUtils.getValueFromPath(rootInstance, fullPath);
+      // Get the current value for comparison using standardized utility
+      const oldValue = ModelPathUtils.getValueFromObjectPath(rootInstance, fullPath);
       
       // Check if this is confirming a pending change from this client
       if (this._pendingChanges.has(fullPath)) {
@@ -354,8 +357,8 @@ export class ClientModel extends EventListener {
         }
       }
       
-      // Update the property in the model
-      const success = ModelPathUtils.setValueAtPath(rootInstance, fullPath, Value);
+      // Update the property in the model using standardized utility
+      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, fullPath, Value);
       
       if (success) {
         console.debug(`Updated property at path ${fullPath} to:`, Value);
@@ -363,9 +366,8 @@ export class ClientModel extends EventListener {
         // Let the BindingManager handle the view updates by dispatching a MODEL_TO_VIEW_PROPERTY_CHANGED event
         // The BindingManager subscribes to this event and will update all relevant view components
         if (this._app?.eventManager) {
-          // Use PascalCase field names for consistency with EventTypes schema
           this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
-            Path: fullPath,
+            ObjectPath: ObjectPath,
             Property: PropertyName,
             Value: Value,
             OldValue: oldValue,
@@ -458,7 +460,9 @@ export class ClientModel extends EventListener {
   /**
    * Handle view-to-model property changes
    * @param {Object} eventData - The event data containing the property change
-   * @param {string} eventData.path - The path to the property that changed
+   * @param {string} eventData.path - The full path to the property (backward compatibility)
+   * @param {string} eventData.objectPath - The path to the object containing the property
+   * @param {string} eventData.property - The name of the property that changed
    * @param {any} eventData.value - The new value of the property
    * @param {any} eventData.oldValue - The previous value of the property (optional)
    * @param {string} eventData.source - The source of the change (optional)
@@ -466,10 +470,35 @@ export class ClientModel extends EventListener {
   handle_view_to_model_property_changed(eventData) {
     try {
       // Extract data using lowercase field names from binding framework
-      const { path, value, oldValue, source } = eventData;
+      const { path, objectPath, property, value, oldValue, source } = eventData;
       
-      if (!path) {
-        console.error('Invalid property change event - missing path:', eventData);
+      if (!path || !property) {
+        console.error('Invalid property change event - missing required fields:', eventData);
+        return;
+      }
+      
+      // Use the path from the event - either as provided or reconstructed from objectPath and property
+      // This ensures backward compatibility with code that might still use path only
+      let standardizedPath = path;
+      
+      // If we have both objectPath and property, prefer using those to construct the path
+      if (objectPath !== undefined && property !== undefined) {
+        try {
+          // Construct the full path from objectPath and property
+          standardizedPath = objectPath ? `${objectPath}.${property}` : property;
+        } catch (err) {
+          console.error(`Failed to construct path from objectPath and property:`, err);
+          return;
+        }
+      }
+      
+      // Ensure the path is in standardized format
+      let standardizedFullPath;
+      try {
+        const { segments, indices } = ModelPathUtils.parseObjectPath(standardizedPath);
+        standardizedFullPath = ModelPathUtils.createObjectPath(segments, indices);
+      } catch (err) {
+        console.error(`Failed to standardize path format for ${standardizedPath}:`, err);
         return;
       }
       
@@ -480,37 +509,52 @@ export class ClientModel extends EventListener {
         return;
       }
       
-      // Update the property in the model
-      const success = ModelPathUtils.setValueAtPath(rootInstance, path, value);
+      // Update the property in the model using standardized utility
+      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, standardizedFullPath, value);
       
       if (success) {
-        console.debug(`Updated property at path ${path} to:`, value);
+        console.debug(`Updated property at path ${standardizedFullPath} to:`, value);
         
         // Track this change as pending until confirmed by server
-        this.trackPendingChange(path, value, oldValue);
+        this.trackPendingChange(standardizedFullPath, value, oldValue);
         
         // Send the change to the server
-        this.sendPropertyChangeToServer(path, value);
+        this.sendPropertyChangeToServer(standardizedFullPath, value);
         
         // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
         if (this._app?.eventManager) {
+          // Use the property from the event data directly when available, otherwise extract it
+          const propertyName = property || (() => {
+            const parsedPath = ModelPathUtils.parseObjectPath(standardizedFullPath);
+            return parsedPath.segments[parsedPath.segments.length - 1];
+          })();
+          
+          // Use the objectPath from the event data when available, otherwise extract it
+          const objectPathValue = objectPath || (() => {
+            const parsedPath = ModelPathUtils.parseObjectPath(standardizedFullPath);
+            const objectSegments = parsedPath.segments.slice(0, -1);
+            const objectIndices = parsedPath.indices.slice(0, parsedPath.indices.length - (parsedPath.segments.length - objectSegments.length));
+            return objectSegments.length > 0 ? 
+              ModelPathUtils.createObjectPath(objectSegments, objectIndices) : '';
+          })();
+          
           this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
-            Path: path,
-            Property: path.split('.').pop(),
+            ObjectPath: objectPathValue,
+            Property: propertyName,
             Value: value,
             OldValue: oldValue,
             Source: source || 'view'
           });
-          console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for path ${path}`);
+          console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for path ${standardizedPath}`);
         }
       } else {
-        console.error(`Failed to update property at path ${path}`);
+        console.error(`Failed to update property at path ${standardizedPath}`);
         
         // Notify about the error
         if (this._app?.eventManager) {
           this._app.eventManager.dispatchEvent(EventTypes.CLIENT_ERROR, {
             ID: 'PROPERTY_UPDATE_ERROR',
-            Message: `Failed to update property at path ${path}`,
+            Message: `Failed to update property at path ${standardizedPath}`,
             Error: 'Path not found in model'
           });
         }
@@ -611,9 +655,13 @@ export class ClientModel extends EventListener {
       
       // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views with the original value
       if (this._app?.eventManager) {
+        // Parse the path to get property name using standardized utilities
+        const { segments } = ModelPathUtils.parseObjectPath(path);
+        const propertyName = segments[segments.length - 1];
+        
         this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
           Path: path,
-          Property: path.split('.').pop(),
+          Property: propertyName,
           Value: oldValue,
           Source: 'rollback'
         });
@@ -635,11 +683,13 @@ export class ClientModel extends EventListener {
       return;
     }
     
-    // Split the path into object path and property name
-    // The last segment is the property name, the rest is the object path
-    const pathParts = path.split('.');
-    const propertyName = pathParts.pop();
-    const objectPath = pathParts.join('.');
+    // Parse the path using standardized utilities
+    const { segments, indices } = ModelPathUtils.parseObjectPath(path);
+    
+    // Extract property name (last segment) and create object path (all but last segment)
+    const propertyName = segments[segments.length - 1];
+    const objectPathSegments = segments.slice(0, segments.length - 1);
+    const objectPath = ModelPathUtils.createObjectPath(objectPathSegments, indices);
     
     // If event manager is not available, just keep the pending change tracked
     // We'll have a way to resend these later
@@ -761,16 +811,20 @@ _rollBackRejectedChange(path, oldValue) {
   }
   
   // Restore the old value in the model
-  const success = ModelPathUtils.setValueAtPath(rootInstance, path, oldValue);
+  const success = ModelPathUtils.setValueAtObjectPath(rootInstance, path, oldValue);
   
   if (success) {
     console.debug(`Rolled back rejected change for ${path} to:`, oldValue);
     
     // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views with the original value
     if (this._app?.eventManager) {
+      // Parse the path to get property name using standardized utilities
+      const { segments } = ModelPathUtils.parseObjectPath(path);
+      const propertyName = segments[segments.length - 1];
+      
       this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
         Path: path,
-        Property: path.split('.').pop(),
+        Property: propertyName,
         Value: oldValue,
         Source: 'rollback'
       });
@@ -789,16 +843,13 @@ _rollBackRejectedChange(path, oldValue) {
 sendPropertyChangeToServer(path, value) {
   if (!path) return;
   
-  // Split the path into object path and property name
-  // The last segment is the property name, the rest is the object path
-  const pathParts = path.split('.');
-  const propertyName = pathParts.pop();
+  // Parse the path using standardized utilities
+  const { segments, indices } = ModelPathUtils.parseObjectPath(path);
   
-  // Ensure the object path starts with "RootModel"
-  let objectPath = pathParts.join('.');
-  if (!objectPath.startsWith('RootModel')) {
-    objectPath = objectPath ? `RootModel.${objectPath}` : 'RootModel';
-  }
+  // Extract property name (last segment) and create object path (all but last segment)
+  const propertyName = segments[segments.length - 1];
+  const objectPathSegments = segments.slice(0, segments.length - 1);
+  const objectPath = ModelPathUtils.createObjectPath(objectPathSegments, indices);
   
   // If event manager is not available, just keep the pending change tracked
   // We'll have a way to resend these later

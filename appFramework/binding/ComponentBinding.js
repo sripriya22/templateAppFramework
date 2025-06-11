@@ -15,16 +15,16 @@ export class ComponentBinding extends Binding {
    * @param {Object} options - The binding options
    * @param {Object} options.model - The model object
    * @param {string} options.path - The property path in the model (usually '')
-   * @param {HTMLElement} options.element - The DOM element to bind to
+   * @param {HTMLElement} options.view - The DOM element to bind to
    * @param {Function} options.updateCallback - Function to call when model changes
    * @param {Object} options.eventManager - The event manager instance
    * @param {Object} options.component - The component instance
    */
   constructor(options) {
-    // Set default attribute to a non-DOM property to avoid DOM updates
+    // Set default viewAttribute to a non-DOM property to avoid DOM updates
     const componentBindingOptions = {
       ...options,
-      attribute: 'data-model-binding',
+      viewAttribute: 'data-model-binding',
       // We don't need view events since this is a one-way binding from model to view
       events: {
         view: null,

@@ -54,7 +54,9 @@ export const EventTypes = Object.freeze({
     // View-to-Model Property Changed Event (when view updates model)
     VIEW_TO_MODEL_PROPERTY_CHANGED: {
       required: {
-        path: { type: 'string', description: 'The path to the property that changed' },
+        path: { type: 'string', description: 'The full path to the property that changed (backward compatibility)' },
+        objectPath: { type: 'string', description: 'The path to the object containing the property' },
+        property: { type: 'string', description: 'The name of the property that changed' },
         value: { type: 'any', description: 'The new value of the property' }
       },
       optional: {
@@ -62,15 +64,14 @@ export const EventTypes = Object.freeze({
         model: { type: 'object', description: 'The model object containing the property' },
         source: { type: 'string', description: 'The source of the change (e.g., "view", "binding", "component")' },
         uid: { type: 'number', description: 'The unique ID of the model instance' },
-        className: { type: 'string', description: 'The class name of the model' },
-        property: { type: 'string', description: 'The property name that changed' }
+        className: { type: 'string', description: 'The class name of the model' }
       }
     },
     
     // Model-to-View Property Changed Event (when model updates itself)
     MODEL_TO_VIEW_PROPERTY_CHANGED: {
       required: {
-        Path: { type: 'string', description: 'The path to the property that changed' },
+        ObjectPath: { type: 'string', description: 'The path to the object containing the property (excludes property name)' },
         Property: { type: 'string', description: 'The name of the property that changed' },
         Value: { type: 'any', description: 'The new value of the property' }
       },
