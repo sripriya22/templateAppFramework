@@ -393,8 +393,21 @@ export class ModelPanel extends BaseComponent {
                     input = document.createElement('select');
                     input.className = 'form-control';
                     
-                    // Add options
-                    if (propConfig.options) {
+                    // Add options - first check if we have ValidValues from the property definition
+                    if (propDef && propDef.ValidValues && Array.isArray(propDef.ValidValues) && propDef.ValidValues.length > 0) {
+                        // Use ValidValues from the property definition
+                        propDef.ValidValues.forEach(validValue => {
+                            const optionEl = document.createElement('option');
+                            optionEl.value = validValue;
+                            optionEl.textContent = validValue;
+                            if (validValue === value) {
+                                optionEl.selected = true;
+                            }
+                            input.appendChild(optionEl);
+                        });
+                    } 
+                    // Fallback to options from propConfig if available
+                    else if (propConfig.options) {
                         propConfig.options.forEach(option => {
                             const optionEl = document.createElement('option');
                             optionEl.value = option.value;
@@ -1008,6 +1021,12 @@ export class ModelPanel extends BaseComponent {
                 case 'object':
                     return 'object';
                 case 'string':
+                    // Check if this string property has ValidValues for dropdown
+                    if (propDef.ValidValues && Array.isArray(propDef.ValidValues) && propDef.ValidValues.length > 0) {
+                        console.log(`Found ValidValues for property: ${propDef.ValidValues.join(', ')}`);
+                        return 'select';
+                    }
+                    return 'text';
                 default:
                     return 'text';
             }

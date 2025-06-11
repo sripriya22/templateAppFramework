@@ -36,6 +36,14 @@ Please analyze the example object file and create appropriate data model definit
     "IsRoot": true,
     "Description": "Root configuration class",
     "Properties": {
+        "PropertyName": {
+            "Type": "string",
+            "IsPrimitive": true,
+            "IsArray": false,
+            "DefaultValue": "default value",
+            "Description": "Description of the property",
+            "ValidValues": ["option1", "option2", "option3"] // Optional: For string properties with constrained values
+        },
         "Name": {
             "Type": "string",
             "IsPrimitive": true,

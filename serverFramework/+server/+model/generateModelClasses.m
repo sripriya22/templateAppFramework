@@ -302,6 +302,23 @@ function [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(prop, pkgNam
     switch lower(type)
         case 'string'
             baseType = 'string';
+            
+            % Check if this string property has ValidValues for validation
+            if isfield(prop, 'ValidValues') && ~isempty(prop.ValidValues)
+                % Create the validation string using mustBeMember
+                validValuesStr = '{';
+                for i = 1:numel(prop.ValidValues)
+                    if i > 1
+                        validValuesStr = [validValuesStr ', ']; %#ok<AGROW>
+                    end
+                    validValuesStr = [validValuesStr '"' strrep(prop.ValidValues{i}, '"', '\\"') '"']; %#ok<AGROW>
+                end
+                validValuesStr = [validValuesStr '}'];
+                
+                % Add mustBeMember validation to the type
+                baseType = ['string {mustBeMember(' propName ', ' validValuesStr ')}'];
+            end
+            
             if isfield(prop, 'DefaultValue')
                 defaultValue = ['"' strrep(prop.DefaultValue, '"', '\\"') '"'];
             else
