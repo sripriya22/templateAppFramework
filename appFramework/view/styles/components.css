@@ -2,6 +2,7 @@
 .toolstrip {
     display: flex;
     align-items: center;
+    justify-content: flex-end; /* Right-justify buttons */
     padding: 8px 16px;
     gap: 8px;
     background-color: var(--panel-background);
@@ -39,6 +40,14 @@
 .toolstrip-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+/* Icon for database button */
+.database-icon::before {
+    content: '\f1c0'; /* FontAwesome database icon unicode */
+    font-family: 'Font Awesome 5 Free';
+    font-weight: 900;
+    margin-right: 6px;
 }
 
 /* Model Panel styles */

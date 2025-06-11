@@ -65,6 +65,7 @@ export class BasicView extends AbstractView {
             toolstrip.addButton({
                 id: 'load-model',
                 label: 'Load Test Data',
+                icon: 'database-icon', // Use a single class name without spaces
                 onClick: () => this._mockLoadModel()
             });
             
