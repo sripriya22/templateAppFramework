@@ -611,15 +611,19 @@ export class ModelPanel extends BaseComponent {
             return;
         }
         
-        // Create container
+        // Create section container with title outside the box (similar to property groups)
+        const sectionContainer = document.createElement('div');
+        sectionContainer.className = 'array-section';
+        
+        // Add section title (outside the box)
+        const sectionTitle = document.createElement('div');
+        sectionTitle.className = 'array-section-title';
+        sectionTitle.textContent = arrayConfig.Label || this.formatLabel(arrayConfig.PropertyPath);
+        sectionContainer.appendChild(sectionTitle);
+        
+        // Create container for the table (the box itself)
         const container = document.createElement('div');
         container.className = 'array-container';
-        
-        // Add header
-        const header = document.createElement('div');
-        header.className = 'array-header';
-        header.textContent = arrayConfig.Label || this.formatLabel(arrayConfig.PropertyPath);
-        container.appendChild(header);
         
         // Create table wrapper with horizontal scrolling
         const tableWrapper = document.createElement('div');
@@ -647,6 +651,7 @@ export class ModelPanel extends BaseComponent {
             headerRow.appendChild(indexTh);
         }
         
+        // Add simple header cells for now - we'll add styling after getting property definitions
         displayProps.forEach(propConfig => {
             const th = document.createElement('th');
             th.textContent = propConfig.Label || this.formatLabel(propConfig.PropertyPath);
@@ -668,6 +673,104 @@ export class ModelPanel extends BaseComponent {
         if (arrayPropDef && arrayPropDef.ElementType) {
             elementClassName = arrayPropDef.ElementType;
             console.log(`Found array element type: ${elementClassName}`);
+        }
+        
+        // Now that we have the arrayPropDef, apply column styling based on property types
+        // Count boolean properties vs. other properties for width distribution
+        const booleanProps = [];
+        const otherProps = [];
+        
+        // Find all th elements we created earlier
+        const headerCells = headerRow.querySelectorAll('th:not(.array-index-column)');
+        
+        // First pass: identify boolean columns by examining actual data
+        // This is more reliable than just checking property definitions
+        const columnTypes = new Array(displayProps.length).fill('unknown');
+        
+        // Check the actual data in the array to determine column types
+        if (array && array.length > 0) {
+            // Sample the first few items to determine column types
+            const sampleSize = Math.min(array.length, 5);
+            
+            for (let i = 0; i < sampleSize; i++) {
+                const item = array[i];
+                
+                displayProps.forEach((propConfig, index) => {
+                    const propPath = propConfig.PropertyPath;
+                    const value = ModelPathUtils.getValueFromObjectPath(item, propPath);
+                    
+                    // If we find a boolean value, mark this column as boolean
+                    if (typeof value === 'boolean') {
+                        columnTypes[index] = 'boolean';
+                    } 
+                    // Only override unknown types
+                    else if (columnTypes[index] === 'unknown') {
+                        columnTypes[index] = typeof value;
+                    }
+                });
+            }
+        }
+        
+        // Fall back to property definitions for columns we couldn't determine from data
+        headerCells.forEach((th, index) => {
+            const propConfig = displayProps[index];
+            if (!propConfig) return;
+            
+            // Skip columns we've already identified from data
+            if (columnTypes[index] !== 'unknown') {
+                if (columnTypes[index] === 'boolean') {
+                    booleanProps.push({ propConfig, th });
+                } else {
+                    otherProps.push({ propConfig, th });
+                }
+                return;
+            }
+            
+            // Fall back to property definition
+            let isBooleanType = false;
+            
+            // Check if we have type information in the property config
+            if (propConfig.Type === 'boolean') {
+                isBooleanType = true;
+            } else {
+                // Try to get property definition from array element type
+                const propName = propConfig.PropertyPath;
+                const propDef = this._getPropertyDefinition(
+                    arrayPropDef?.ElementType || (arrayPropDef?.Type === 'array' ? arrayPropDef.ElementType : null),
+                    propName
+                );
+                
+                if (propDef && propDef.Type === 'boolean') {
+                    isBooleanType = true;
+                }
+            }
+            
+            // Categorize the property
+            if (isBooleanType) {
+                booleanProps.push({ propConfig, th });
+            } else {
+                otherProps.push({ propConfig, th });
+            }
+        });
+        
+        // Apply column widths based on type
+        console.log('Boolean columns:', booleanProps.length, 'Other columns:', otherProps.length);
+        
+        // Apply fixed width to boolean columns
+        booleanProps.forEach(({ th }) => {
+            th.classList.add('boolean-column');
+        });
+        
+        // Set table layout to fixed to ensure column widths are respected
+        table.style.tableLayout = 'fixed';
+        
+        // For non-boolean columns, set width to auto to distribute remaining space
+        if (otherProps.length > 0) {
+            const percentWidth = 100 / (displayProps.length - booleanProps.length);
+            
+            otherProps.forEach(({ th }) => {
+                th.style.width = `${percentWidth}%`;
+            });
         }
         
         // Add rows for each item
@@ -708,9 +811,30 @@ export class ModelPanel extends BaseComponent {
                 // Create appropriate widget
                 const widget = this._createWidgetFromMetadata(propConfig, value, propDef);
                 
-                // Set common attributes
-                widget.className = 'form-control';
-                widget.disabled = propConfig.Editable === false;
+                // Handle non-editable fields differently based on type
+                if (propConfig.Editable === false) {
+                    // For non-editable text inputs, replace with bold label
+                    if (widget.type === 'text' || widget.type === 'number') {
+                        // Create a label instead of an input
+                        const label = document.createElement('span');
+                        label.className = 'non-editable-label';
+                        label.textContent = value !== undefined && value !== null ? value.toString() : '';
+                        
+                        // Replace the widget with our label
+                        cell.appendChild(label);
+                        row.appendChild(cell);
+                        
+                        // Skip to next iteration by avoiding the code below
+                        return;
+                    } else {
+                        // For other types like checkboxes, just disable them
+                        widget.disabled = true;
+                        widget.className = 'form-control';
+                    }
+                } else {
+                    // Normal editable field
+                    widget.className = 'form-control';
+                }
                 
                 cell.appendChild(widget);
                 row.appendChild(cell);
@@ -777,9 +901,13 @@ export class ModelPanel extends BaseComponent {
         
         table.appendChild(tbody);
         tableWrapper.appendChild(table);
+        container.appendChild(tableWrapper);
+        
+        // Add container to the section container
+        sectionContainer.appendChild(container);
         
         // Add to DOM
-        this.formElement.appendChild(container);
+        this.formElement.appendChild(sectionContainer);
     }
     
     /**
