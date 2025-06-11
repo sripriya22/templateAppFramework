@@ -229,10 +229,15 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
             end
             
             % Determine property type, size, and default value
-            [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(prop, pkgName);
+            [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(propName, prop, pkgName);
             
             % Ensure propType is properly qualified with package name if it's a custom type
-            if ~isempty(pkgName) && ~isempty(propType) && ~strcmp(propType, 'string') && ~strcmp(propType, 'double') && ~strcmp(propType, 'logical')
+            % Skip package qualification for primitive types and string types with validation
+            if ~isempty(pkgName) && ~isempty(propType) && ...
+                    ~strcmp(propType, 'string') && ...
+                    ~strcmp(propType, 'double') && ...
+                    ~strcmp(propType, 'logical') && ...
+                    ~startsWith(propType, 'string {') ...
                 if isempty(regexp(propType, '^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$', 'once'))
                     propType = [pkgName '.' propType];
                 end
@@ -282,7 +287,7 @@ function classContent = generateClassContent(jsonData, pkgName, isRoot, verbose)
     end
 end
 
-function [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(prop, pkgName)
+function [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(propName, prop, pkgName)
     % Get property type, size, and default value from property definition
     % pkgName - The package name to use for custom types
 
@@ -306,14 +311,14 @@ function [propType, sizeStr, defaultValue] = getPropertyTypeAndSize(prop, pkgNam
             % Check if this string property has ValidValues for validation
             if isfield(prop, 'ValidValues') && ~isempty(prop.ValidValues)
                 % Create the validation string using mustBeMember
-                validValuesStr = '{';
+                validValuesStr = '[';
                 for i = 1:numel(prop.ValidValues)
                     if i > 1
                         validValuesStr = [validValuesStr ', ']; %#ok<AGROW>
                     end
                     validValuesStr = [validValuesStr '"' strrep(prop.ValidValues{i}, '"', '\\"') '"']; %#ok<AGROW>
                 end
-                validValuesStr = [validValuesStr '}'];
+                validValuesStr = [validValuesStr ']'];
                 
                 % Add mustBeMember validation to the type
                 baseType = ['string {mustBeMember(' propName ', ' validValuesStr ')}'];
