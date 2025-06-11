@@ -193,7 +193,10 @@ export class BindingManager {
     
     // Strip RootModel prefix for consistency with bindings that don't use it
     let normalizedPath = objectPath;
-    if (normalizedPath.startsWith('RootModel.')) {
+    if (normalizedPath === 'RootModel') {
+      // Handle case where we're working with the root model itself
+      normalizedPath = '';
+    } else if (normalizedPath.startsWith('RootModel.')) {
       normalizedPath = normalizedPath.substring(10); // Remove 'RootModel.'
     }
     

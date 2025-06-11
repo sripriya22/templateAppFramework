@@ -163,13 +163,23 @@ export class Binding {
     let bindingPath = this.objectPath;
     
     // Strip RootModel prefix from event path if present
-    if (eventPath && eventPath.startsWith('RootModel.')) {
-      eventPath = eventPath.substring(10); // Remove 'RootModel.'
+    if (eventPath) {
+      if (eventPath === 'RootModel') {
+        // Handle case where we're working with the root model itself
+        eventPath = '';
+      } else if (eventPath.startsWith('RootModel.')) {
+        eventPath = eventPath.substring(10); // Remove 'RootModel.'
+      }
     }
     
     // Strip RootModel prefix from binding path if present
-    if (bindingPath && bindingPath.startsWith('RootModel.')) {
-      bindingPath = bindingPath.substring(10); // Remove 'RootModel.'
+    if (bindingPath) {
+      if (bindingPath === 'RootModel') {
+        // Handle case where we're working with the root model itself
+        bindingPath = '';
+      } else if (bindingPath.startsWith('RootModel.')) {
+        bindingPath = bindingPath.substring(10); // Remove 'RootModel.'
+      }
     }
     
     // Check if the changed property matches our binding using objectPath+property

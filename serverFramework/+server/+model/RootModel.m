@@ -44,7 +44,8 @@ classdef RootModel < server.model.BaseObject
             %            'root.array[0].property' compatible with the binding framework
             
             % Start the search from the root model
-            path = obj.findObjectPath(obj, uid, "RootModel");
+            % TODO: fix string vs. char issue
+            path = obj.findObjectPath(obj, uid, 'RootModel');
             
             if isempty(path)
                 % If path not found, fall back to using the UID directly
