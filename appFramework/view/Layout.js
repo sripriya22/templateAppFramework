@@ -25,6 +25,7 @@ export class Layout {
         // Create header
         this.headerElement = document.createElement('div');
         this.headerElement.className = 'layout-header';
+        this.headerElement.style.display = 'none'; // Hide by default
 
         // Create content container (holds main content and side panels)
         this.contentElement = document.createElement('div');
@@ -33,6 +34,7 @@ export class Layout {
         // Create left panel
         this.leftElement = document.createElement('div');
         this.leftElement.className = 'layout-left';
+        this.leftElement.style.display = 'none'; // Hide by default
         this.leftToggle = this.createToggleButton(this.leftElement, 'left');
         this.leftElement.appendChild(this.leftToggle);
         
@@ -50,6 +52,7 @@ export class Layout {
         // Create main panel
         this.mainElement = document.createElement('div');
         this.mainElement.className = 'layout-main';
+        // Main panel is always shown as it's the primary content area
         
         // Create main panel content container
         this.mainContent = document.createElement('div');
@@ -59,6 +62,7 @@ export class Layout {
         // Create right panel
         this.rightElement = document.createElement('div');
         this.rightElement.className = 'layout-right';
+        this.rightElement.style.display = 'none'; // Hide by default
         this.rightToggle = this.createToggleButton(this.rightElement, 'right');
         this.rightElement.appendChild(this.rightToggle);
         
@@ -76,6 +80,7 @@ export class Layout {
         // Create bottom panel
         this.bottomElement = document.createElement('div');
         this.bottomElement.className = 'layout-bottom';
+        this.bottomElement.style.display = 'none'; // Hide by default
         this.bottomToggle = this.createToggleButton(this.bottomElement, 'bottom');
         this.bottomElement.appendChild(this.bottomToggle);
         
@@ -211,8 +216,14 @@ export class Layout {
      */
     setHeader(element) {
         this.headerElement.innerHTML = '';
+        
         if (element) {
+            // Show panel and add content
+            this.headerElement.style.display = 'block';
             this.headerElement.appendChild(element);
+        } else {
+            // Hide panel completely if no content
+            this.headerElement.style.display = 'none';
         }
     }
 
@@ -222,8 +233,14 @@ export class Layout {
      */
     setMain(element) {
         this.mainContent.innerHTML = '';
+        
         if (element) {
+            // Show panel and add content
+            this.mainElement.style.display = 'flex';
             this.mainContent.appendChild(element);
+        } else {
+            // Hide panel completely if no content
+            this.mainElement.style.display = 'none';
         }
     }
 
@@ -233,8 +250,14 @@ export class Layout {
      */
     setLeft(element) {
         this.leftContent.innerHTML = '';
+        
         if (element) {
+            // Show panel and add content
+            this.leftElement.style.display = 'flex';
             this.leftContent.appendChild(element);
+        } else {
+            // Hide panel completely if no content
+            this.leftElement.style.display = 'none';
         }
     }
 
@@ -244,8 +267,14 @@ export class Layout {
      */
     setRight(element) {
         this.rightContent.innerHTML = '';
+        
         if (element) {
+            // Show panel and add content
+            this.rightElement.style.display = 'flex';
             this.rightContent.appendChild(element);
+        } else {
+            // Hide panel completely if no content
+            this.rightElement.style.display = 'none';
         }
     }
 
@@ -255,8 +284,14 @@ export class Layout {
      */
     setBottom(element) {
         this.bottomContent.innerHTML = '';
+        
         if (element) {
+            // Show panel and add content
+            this.bottomElement.style.display = 'block';
             this.bottomContent.appendChild(element);
+        } else {
+            // Hide panel completely if no content
+            this.bottomElement.style.display = 'none';
         }
     }
 

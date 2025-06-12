@@ -160,16 +160,26 @@ class MyApp extends AbstractApp {
 ## 6. Using `appGenerator` to Develop a Template App
 
 - **Purpose**: Automates creation of new app skeletons with the correct structure
-- **How to use**:
-  1. From the project root, run:
+- **Current workflow**:
+  1. Create JSON model definition files (in a directory like `data-model/`)
+  2. Mark your root model with `IsRoot=true` in its JSON definition
+  3. From the project root, run:
      ```bash
-     node appGenerator/utils/create-app.js <AppName> <path/to/example.json>
+     node appGenerator/utils/create-app.js <AppName> --data <path/to/example.json> --model-defs-dir <path/to/model-defs> [options]
      ```
-     This creates a new folder in `/apps/<AppName>/` with all required subfolders and copies the example data.
-  2. Edit the generated `data-model/` JSONs to define your model classes.
-  3. Generate model classes using the class generator.
-  4. Implement your custom logic in `App.js` and custom views/controllers as needed.
-- **No build step required**: All code runs directly in the browser and is compatible with MATLAB's HTML integration.
+     This creates a new folder in `/apps/<AppName>/` with all required subfolders and:
+     - Copies the example data file to resources/
+     - Copies model definition JSONs to the app's data-model/ directory without modification
+     - Generates proper MATLAB class files in server/model/+<appName>/ 
+     - Creates App.js with direct (non-relative) imports and proper model loading
+     - Generates ModelPanelConfig.json from model definitions
+
+  **Available options**:
+    - `--data <path>` (required): Path to example JSON data file
+    - `--model-defs-dir <path>`: Path to directory containing model definition JSON files
+    - `--root-class <className>`: Name of the root class for the application (detected automatically if not specified)
+    - `--force` or `-f`: Overwrite existing app if it exists
+    - `--title <title>`: Custom title for the application
 
 ## 7. Testing the Framework and Applications
 
@@ -236,7 +246,12 @@ class MyApp extends AbstractApp {
 - **MATLAB Integration**: Works with MATLAB's HTML component (`uihtml`) and runs standalone
 
 - **Data Binding**:
-  - Done - TODO fill in this section
+  - ModelPanel components support automatic data binding to model objects
+  - Views can bind widgets to model properties via the Binding class
+  - Changes to model data trigger UI updates automatically via the Observer pattern
+  - Both simple properties and nested object paths are supported (e.g., 'parameters[0].value')
+  - Validation is performed automatically based on model property definitions
+  - Read-only properties are presented as non-editable fields in the UI
 
 - **CSS Organization Strategy**:
   - **Component-specific CSS**: Each component with unique styling needs should have its own CSS file (e.g., `ModelPanel.css`, `dropdown-button.css`)
@@ -248,32 +263,23 @@ class MyApp extends AbstractApp {
 
 ---
 
-### **(6) Using `appGenerator` to Develop a Template App**
+### **MATLAB Integration**
 
-- **Purpose**: Automates creation of new app skeletons with the correct structure.
-- **How to use**:
-  1. From the project root, run:
-     ```bash
-     node appGenerator/utils/create-app.js <AppName> --data <path/to/example.json> [options]
-     ```
-     This creates a new folder in `/apps/<AppName>/` with all required subfolders and copies the example data.
-     
-  **Available options**:
-     
-  - `--data <path>` (required): Path to example JSON data file
-  - `--model-defs-dir <path>`: Path to directory containing model definition JSON files
-  - `--root-class <className>`: Name of the root class for the application
-  - `--force` or `-f`: Overwrite existing app if it exists
-  - `--title <title>`: Custom title for the application
+- **Key Components**:
+  - MATLAB uihtml component hosts the web app
+  - Server-side MATLAB model classes mirror JavaScript client-side models
+  - Path construction is environment-aware (browser vs MATLAB)
+  - Static resources (CSS, icons, JSON) are served correctly in both environments
 
-  **Example with all options**:
-  ```bash
-  node appGenerator/utils/create-app.js MyApp --data example.json --model-defs-dir ./model-defs --root-class Configuration --force --title "My Custom App"
-  ```
-  2. Edit the generated `data-model/` JSONs to define your model classes.
-  3. Generate model classes using the class generator.
-  4. Implement your custom logic in `App.js` and custom views/controllers as needed.
-- **No build step required**: All code runs directly in the browser and is compatible with MATLAB's HTML integration.
+- **Resource Paths**:
+  - AbstractApp provides `getMatlabBaseUrl()` which components should use for resource paths
+  - Icons and CSS load properly in both browser and MATLAB environments
+  - Use SVG icons where possible for better cross-environment compatibility
+
+- **Model Inheritance**:
+  - Root classes inherit from `server.model.RootModel`
+  - All other model classes inherit from `server.model.BaseObject`
+  - App generator ensures proper inheritance when creating MATLAB class files
 
 ### **(7) Testing the Framework and Applications**
 
