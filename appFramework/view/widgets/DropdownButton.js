@@ -9,6 +9,7 @@ export class DropdownButton {
      * @param {Object} config - Button configuration
      * @param {string} config.id - Button ID
      * @param {string} config.label - Button label text
+     * @param {string} [config.icon] - Optional icon class or URL for the main button
      * @param {Array} config.items - Array of menu items with label and onClick properties
      * @param {boolean} [config.disabled=false] - Whether the button is disabled
      * @param {string} [config.className] - Additional CSS class for styling
@@ -71,6 +72,26 @@ export class DropdownButton {
                 option.value = index.toString();
                 this.select.appendChild(option);
             });
+        }
+        
+        // Add icon if provided
+        if (this.config.icon) {
+            const iconElement = document.createElement('span');
+            iconElement.className = 'button-icon';
+            
+            // Check if icon is a URL or a class name
+            if (this.config.icon.includes('/') || this.config.icon.includes('.')) {
+                // It's a URL, create an image element
+                const iconImg = document.createElement('img');
+                iconImg.src = this.config.icon;
+                iconImg.alt = '';
+                iconElement.appendChild(iconImg);
+            } else {
+                // It's a class name
+                iconElement.classList.add(this.config.icon);
+            }
+            
+            this.buttonWrapper.appendChild(iconElement);
         }
         
         // Create visible button label

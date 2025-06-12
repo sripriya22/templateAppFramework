@@ -61,11 +61,22 @@ export class BasicView extends AbstractView {
             this._setComponent('right', jsonViewer.element);
             this._setComponent('bottom', logConsole.element);
             
-            // Add test button to toolstrip
+            // Add test button to toolstrip with SVG icon
+            // Use getIconPath helper if available, or direct path if not
+            const iconPath = '/assets/icons/model.svg';
+            const icon = this._app && this._app.isMatlabEnvironment && this._app.isMatlabEnvironment() ?
+                (() => {
+                    const matlabBaseUrl = this._app.getMatlabBaseUrl();
+                    const baseUrlWithSlash = matlabBaseUrl.endsWith('/') ? matlabBaseUrl : `${matlabBaseUrl}/`;
+                    const cleanPath = iconPath.startsWith('/') ? iconPath.substring(1) : iconPath;
+                    return `${baseUrlWithSlash}${cleanPath}`;
+                })() :
+                iconPath;
+                
             toolstrip.addButton({
                 id: 'load-model',
                 label: 'Load Test Data',
-                icon: 'database-icon', // Use a single class name without spaces
+                icon: icon,
                 onClick: () => this._mockLoadModel()
             });
             

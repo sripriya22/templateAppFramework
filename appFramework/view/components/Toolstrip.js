@@ -27,7 +27,25 @@ export class Toolstrip extends BaseComponent {
         if (!document.querySelector('link[href$="dropdown-button.css"]')) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
-            link.href = '/appFramework/view/styles/dropdown-button.css';
+            
+            // Use app's resource loading if available (for MATLAB environment)
+            if (this._view && this._view.getApp && this._view.getApp()) {
+                const app = this._view.getApp();
+                if (app.isMatlabEnvironment && app.isMatlabEnvironment()) {
+                    // In MATLAB, use the MatlabResourceLoader
+                    const matlabBaseUrl = app.getMatlabBaseUrl();
+                    // Ensure there's a trailing slash in the base URL
+                    const baseUrlWithSlash = matlabBaseUrl.endsWith('/') ? matlabBaseUrl : `${matlabBaseUrl}/`;
+                    link.href = `${baseUrlWithSlash}appFramework/view/styles/dropdown-button.css`;
+                } else {
+                    // In browser
+                    link.href = '/appFramework/view/styles/dropdown-button.css';
+                }
+            } else {
+                // Fallback to standard path
+                link.href = '/appFramework/view/styles/dropdown-button.css';
+            }
+            
             document.head.appendChild(link);
         }
     }

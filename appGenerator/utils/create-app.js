@@ -3,12 +3,13 @@
 import { mkdir, readFile, writeFile, unlink, rm } from 'fs/promises';
 import { dirname, join, basename, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { existsSync, promises as fsPromises, constants } from 'fs';
+import fs from 'fs';
+import { promises as fsPromises } from 'fs';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { generateAppModels } from './generate-matlab-classes.js';
 
 const execPromise = promisify(exec);
-const fs = { promises: fsPromises, constants };
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -34,7 +35,7 @@ const DIRS_TO_CREATE = [
 
 // Create a simple read stream wrapper that handles errors better
 function createReadStreamSafe(path, options) {
-  const stream = fs.promises.createReadStream(path, options);
+  const stream = fs.createReadStream(path, options);
   stream.on('error', (err) => {
     console.error(`  - Read stream error: ${err.message}`);
   });
@@ -43,7 +44,7 @@ function createReadStreamSafe(path, options) {
 
 // Create a simple write stream wrapper that handles errors better
 function createWriteStreamSafe(path, options) {
-  const stream = fs.promises.createWriteStream(path, options);
+  const stream = fs.createWriteStream(path, options);
   stream.on('error', (err) => {
     console.error(`  - Write stream error: ${err.message}`);
   });
@@ -55,19 +56,18 @@ function createWriteStreamSafe(path, options) {
  * @param {string} filePath - Path to the file to read
  * @returns {Promise<string>} File contents as a string
  */
-async function readFileWithRetry(filePath) {
+async function readFileWithRetry(filePath, retries = 3) {
   try {
-    // First try with UTF-8
-    return await fs.promises.readFile(filePath, 'utf8');
+    return await readFile(filePath, 'utf8');
   } catch (utf8Err) {
     // If UTF-8 fails, try with binary encoding
     try {
-      const data = await fs.promises.readFile(filePath, 'binary');
+      const data = await readFile(filePath, 'binary');
       return data;
     } catch (binaryErr) {
       // If binary fails, try one more time with UTF-8
       try {
-        return await fs.promises.readFile(filePath, 'utf8');
+        return await readFile(filePath, 'utf8');
       } catch (finalErr) {
         throw new Error(`Failed to read file after multiple attempts: ${finalErr.message}`);
       }
@@ -83,12 +83,12 @@ async function readFileWithRetry(filePath) {
 async function getModelClassNames(dataModelDir) {
   try {
     // Check if directory exists
-    if (!existsSync(dataModelDir)) {
+    if (!fs.existsSync(dataModelDir)) {
       console.warn(`Warning: Model definitions directory does not exist: ${dataModelDir}`);
       return [];
     }
     
-    const files = await fs.promises.readdir(dataModelDir);
+    const files = await fsPromises.readdir(dataModelDir);
     const jsonFiles = files.filter(file => file.endsWith('.json'));
     
     if (jsonFiles.length === 0) {
@@ -129,7 +129,7 @@ async function findRootClass(modelDefsDir) {
   for (const file of files) {
     if (file.endsWith('.json')) {
       try {
-        const content = fs.readFileSync(path.join(modelDefsDir, file), 'utf8');
+        const content = fs.readFileSync(join(modelDefsDir, file), 'utf8');
         const def = JSON.parse(content);
         if (def.IsRoot) {
           return def.ClassName;
@@ -192,20 +192,32 @@ async function createApp(targetPath, dataFile, options = {}) {
     // Step 1: Copy the data file (required)
     testDataPath = await copyDataFile(dataFile, targetPath);
     
-    // Step 2: Copy model definitions to the server/model/+appName directory
+    // Step 2: Copy model definitions to the data-model directory
     if (options.modelDefsDir) {
-      const serverModelDir = join(targetPath, 'server', 'model');
-      const appPackageDir = join(serverModelDir, `+${appName}`);
-      await mkdir(appPackageDir, { recursive: true });
+      const dataModelDir = join(targetPath, 'data-model');
+      await mkdir(dataModelDir, { recursive: true });
       
-      // Update model definitions to use package-qualified class names
-      await copyModelDefinitions(options.modelDefsDir, appPackageDir, appName);
+      // Copy model definitions to data-model directory
+      await copyModelDefinitions(options.modelDefsDir, dataModelDir, appName, rootClass);
+      
+      // Step 2b: Generate MATLAB class files from JSON model definitions
+      console.log('Generating MATLAB class files from model definitions...');
+      try {
+        await generateAppModels(appName, targetPath, {
+          overwrite: options.force,
+          verbose: true
+        });
+        console.log('  ✓ Successfully generated MATLAB class files');
+      } catch (err) {
+        console.warn(`Warning: Failed to generate MATLAB class files: ${err.message}`);
+      }
     } else {
       console.warn('Warning: No model definitions directory specified. Using auto-generated model definitions.');
       // App will use the auto-generated model definition from the data file
     }
     
     // Step 3: Get all model class names
+    // Look in the data-model directory where we copied the model definitions
     const dataModelDir = join(targetPath, 'data-model');
     const modelClassNames = await getModelClassNames(dataModelDir);
     if (modelClassNames.length === 0) {
@@ -213,7 +225,7 @@ async function createApp(targetPath, dataFile, options = {}) {
     }
     
     // Step 4: Copy all template files
-    await copyAllTemplateFiles(TEMPLATES_DIR, targetPath, appName, appTitle, modelClassNames, testDataPath);
+    await copyAllTemplateFiles(TEMPLATES_DIR, targetPath, appName, appTitle, modelClassNames, rootClass, testDataPath);
     
     // Step 5: Generate ModelPanelConfig.json dynamically from model definitions
     console.log('Generating ModelPanelConfig.json...');
@@ -247,75 +259,7 @@ async function createApp(targetPath, dataFile, options = {}) {
     process.exit(1);
   }
   
-  // Function to copy a file with directory creation
-  async function copyWithDirs(source, dest, appName, appTitle, appFolderPath) {
-    try {
-      // Create destination directory if it doesn't exist
-      const destDir = dirname(dest);
-      if (!existsSync(destDir)) {
-        await mkdir(destDir, { recursive: true });
-      }
-      
-      // Read the source file
-      let content = await readFile(source, 'utf8');
-      
-      // Check if we need to use the new template files (treat .new templates as .js)
-      if (source.endsWith('.new')) {
-        // For the new templates, we need to do replacements
-        const modelClassDir = join(targetPath, 'data-model');
-        const modelClassNames = await getModelClassNames(modelClassDir);
-        const formattedClassNames = modelClassNames.length > 0 
-          ? modelClassNames.map(name => `'${name}'`).join(',\n      ')
-          : `'${appName}'`; // Default to app name if no models found
-          
-        // Get any test data paths
-        const resourcesDir = join(targetPath, 'resources');
-        let testDataPaths = [];
-        if (existsSync(resourcesDir)) {
-          const files = await fs.promises.readdir(resourcesDir);
-          testDataPaths = files
-            .filter(file => file.endsWith('.json'))
-            .map(file => `'resources/${file}'`);
-        }
-        
-        if (testDataPaths.length === 0) {
-          testDataPaths.push(`'resources/testData.json'`); // Default test data path
-        }
-        
-        const formattedTestDataPaths = testDataPaths.join(',\n      ');
-        
-        // Apply replacements for the template
-        content = content
-          .replace(/{{APP_NAME}}/g, appName)
-          .replace(/{{APP_TITLE}}/g, appTitle)
-          .replace(/{{APP_FOLDER_PATH}}/g, appFolderPath)
-          .replace(/{{MODEL_CLASS_NAMES}}/g, formattedClassNames)
-          .replace(/{{TEST_DATA_PATHS}}/g, formattedTestDataPaths);
-          
-        // Remove .new extension from destination
-        if (dest.endsWith('.new')) {
-          dest = dest.substring(0, dest.length - 4);
-        }
-      }
-      
-      // For JS files, update import paths to use relative paths from the new app location
-      if (source.endsWith('.js') || source.endsWith('.js.new')) {
-        // Update import paths for App.js
-        content = content.replace(
-          /from '\.\.\/\.\.\/\.\.\/appFramework\//g, 
-          "from '../../appFramework/"
-        );
-      } 
-      
-      // Write the file
-      await writeFile(dest, content, 'utf8');
-      console.log(`  ✓ Created: ${dest}`);
-      
-    } catch (error) {
-      console.error(`  ✗ Error copying ${source} to ${dest}:`, error.message);
-      throw error;
-    }
-  }
+  // NOTE: The previous copyWithDirs function was removed as it was no longer being used
 }
 
 async function copyDataFile(dataFile, targetPath) {
@@ -326,7 +270,7 @@ async function copyDataFile(dataFile, targetPath) {
   
   try {
     // Check if source file exists
-    if (!existsSync(sourceFile)) {
+    if (!fs.existsSync(sourceFile)) {
       throw new Error(`Data file not found: ${sourceFile}`);
     }
     
@@ -356,15 +300,17 @@ async function copyDataFile(dataFile, targetPath) {
  * Copy model definition files from a source directory
  * @param {string} modelDefsDir - Path to directory containing model definition files
  * @param {string} targetPath - Path to app directory
+ * @param {string} appName - Name of the app
+ * @param {string} rootClassName - Name of the root class
  * @returns {Promise<void>}
  */
-async function copyModelDefinitions(modelDefsDir, targetPath, appName) {
+async function copyModelDefinitions(modelDefsDir, targetPath, appName, rootClassName) {
   // Validate inputs
   if (!modelDefsDir) {
     throw new Error('Model definitions directory is required');
   }
   
-  if (!existsSync(modelDefsDir)) {
+  if (!fs.existsSync(modelDefsDir)) {
     throw new Error(`Model definitions directory not found: ${modelDefsDir}`);
   }
   
@@ -372,44 +318,22 @@ async function copyModelDefinitions(modelDefsDir, targetPath, appName) {
   await mkdir(targetPath, { recursive: true });
   
   // Get list of JSON files in the source directory
-  const files = await fs.promises.readdir(modelDefsDir);
+  const files = await fsPromises.readdir(modelDefsDir);
   const jsonFiles = files.filter(file => file.endsWith('.json'));
   
   if (jsonFiles.length === 0) {
     throw new Error(`No JSON model definition files found in ${modelDefsDir}`);
   }
   
-  // Copy each JSON file
+  // Copy each JSON file without modifying its content
   let copiedCount = 0;
   for (const file of jsonFiles) {
     try {
       const sourcePath = join(modelDefsDir, file);
       const destPath = join(targetPath, file);
       
-      // Read source file
-      const content = await readFile(sourcePath, 'utf8');
-      
-      // Parse to validate JSON
-      JSON.parse(content);
-      
-      // Update property types to be package-qualified
-      const def = JSON.parse(content);
-      if (def.Properties) {
-        for (const propName in def.Properties) {
-          const prop = def.Properties[propName];
-          if (!prop.IsPrimitive && prop.Type && !prop.Type.startsWith(appName + '.')) {
-            prop.Type = `${appName}.${prop.Type}`;
-          }
-        }
-      }
-      
-      // Update SuperClass to be package-qualified if it exists and isn't BaseObject or RootModel
-      if (def.SuperClass && !['BaseObject', 'RootModel', `server.model.BaseObject`, `server.model.RootModel`].includes(def.SuperClass)) {
-        def.SuperClass = `${appName}.${def.SuperClass}`;
-      }
-      
-      // Write the updated definition to the target directory
-      await writeFile(destPath, JSON.stringify(def, null, 2));
+      // Copy the file directly without modifying its contents
+      await fsPromises.copyFile(sourcePath, destPath);
       console.log(`  ✓ Copied model definition: ${destPath}`);
       copiedCount++;
     } catch (err) {
@@ -430,13 +354,13 @@ async function copyModelDefinitions(modelDefsDir, targetPath, appName) {
  * @param {string} testDataPath - Relative path to test data file
  * @returns {Promise<void>}
  */
-async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle, modelClassNames, testDataPath) {
+async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle, modelClassNames, rootClassName, testDataPath) {
   // Validate inputs
   if (!templatesDir || !targetPath || !appName) {
     throw new Error('Missing required parameters for copying template files');
   }
   
-  if (!existsSync(templatesDir)) {
+  if (!fs.existsSync(templatesDir)) {
     throw new Error(`Templates directory not found: ${templatesDir}`);
   }
   
@@ -450,7 +374,7 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
     const sourcePath = join(templatesDir, file);
     const destPath = join(targetPath, file);
     
-    if (!existsSync(sourcePath)) {
+    if (!fs.existsSync(sourcePath)) {
       throw new Error(`Template file not found: ${sourcePath}`);
     }
     
@@ -463,6 +387,7 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
       .replace(/\{\{APP_TITLE\}\}/g, appTitle || appName)
       .replace(/\{\{APP_FOLDER_PATH\}\}/g, appName) // Fix app folder path for model loading
       .replace(/\{\{TEST_DATA_PATH\}\}/g, testDataPath || '')
+      .replace(/\{\{ROOT_CLASS_NAME\}\}/g, rootClassName || '') // Add root class name replacement
       // Ensure model class names are output as a flat array, not nested
       .replace(/\{\{MODEL_CLASS_NAMES\}\}/g, modelClassNames ? JSON.stringify(modelClassNames) : '[]');
     
@@ -486,7 +411,7 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
   
   // Copy and process HTML template
   const htmlTemplatePath = join(templatesDir, 'index.html');
-  if (!existsSync(htmlTemplatePath)) {
+  if (!fs.existsSync(htmlTemplatePath)) {
     throw new Error(`HTML template not found: ${htmlTemplatePath}`);
   }
   
@@ -528,13 +453,13 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
     throw new Error('Model definitions directory is required');
   }
   
-  if (!existsSync(modelDefsDir)) {
+  if (!fs.existsSync(modelDefsDir)) {
     throw new Error(`Model definitions directory not found: ${modelDefsDir}`);
   }
   
   // Read root class file
   let rootClassFile = null;
-  const files = await fs.promises.readdir(modelDefsDir);
+  const files = await fsPromises.readdir(modelDefsDir);
   const jsonFiles = files.filter(file => file.endsWith('.json'));
   
   for (const file of jsonFiles) {
@@ -561,8 +486,8 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
   // Generate configuration that matches the working app format
   const config = {
     "ConfigName": "ModelPanelConfig",
-    "Description": `Configuration for ${appName}.${rootClassDef.ClassName}`,
-    "ModelClass": `${appName}.${rootClassDef.ClassName}`,
+    "Description": `Configuration for the Model Panel view in ${appName}`,
+    "ModelClass": `${rootClassDef.ClassName}`,
     "PropertyGroups": [],
     "ArrayConfigs": []
   };
@@ -614,7 +539,6 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
             displayProperties.push({
               "PropertyPath": itemPropName, // Use exact case from class definition
               "Label": itemPropName.charAt(0).toUpperCase() + itemPropName.slice(1),
-              "Editable": true,
               "Order": displayPropOrder++
             });
           }
@@ -624,7 +548,6 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
         displayProperties.push({
           "PropertyPath": "Name", // Default with proper casing
           "Label": "Name", 
-          "Editable": true,
           "Order": 1
         });
       }
@@ -642,7 +565,6 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
       basicGroup.Properties.push({
         "PropertyPath": propName, // Keep original case from model definition
         "Label": propName.charAt(0).toUpperCase() + propName.slice(1),
-        "Editable": true,
         "Order": propertyOrder++
       });
     } else {
@@ -653,7 +575,6 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
         basicGroup.Properties.push({
           "PropertyPath": propName, // Preserve original case from model definition
           "Label": propName.charAt(0).toUpperCase() + propName.slice(1),
-          "Editable": true,
           "Order": propertyOrder++
         });
         
@@ -700,7 +621,7 @@ async function generateModelPanelConfig(modelDefsDir, appName) {
 
 // Command-line processing
 const args = process.argv.slice(2);
-let appName, dataFile, force = false, rootClass, title, modelDefsDir;
+let appName, dataFile, force = false, title, modelDefsDir;
 let i = 0;
 
 // Parse command-line arguments
@@ -709,8 +630,6 @@ while (i < args.length) {
   
   if (arg === '--force' || arg === '-f') {
     force = true;
-  } else if (arg === '--root-class' && i+1 < args.length) {
-    rootClass = args[++i];
   } else if (arg === '--title' && i+1 < args.length) {
     title = args[++i];
   } else if (arg === '--data' && i+1 < args.length) {
@@ -731,7 +650,6 @@ if (!appName) {
   console.error('Usage: node create-app.js [options] <app-name> --data <data-file>');
   console.error('Options:');
   console.error('  --force, -f           Force overwrite if app directory already exists');
-  console.error('  --root-class <name>   Set the root model class name (default: Configuration)');
   console.error('  --title <title>       Set the application title');
   console.error('  --data <data-file>    Path to a data file to copy to resources/');
   console.error('  --model-defs-dir <dir> Path to a directory containing model definitions');
@@ -753,7 +671,7 @@ if (!dataFile) {
 const targetPath = join(APPS_DIR, appName);
 
 // Check if target directory already exists
-if (existsSync(targetPath)) {
+if (fs.existsSync(targetPath)) {
   if (force) {
     console.warn(`WARNING: App directory ${targetPath} already exists and will be overwritten`);
     await rm(targetPath, { recursive: true, force: true });
@@ -766,7 +684,7 @@ if (existsSync(targetPath)) {
 
 // Check if root HTML already exists
 const rootHtmlPath = join(ROOT_PATH, `${appName}.html`);
-if (existsSync(rootHtmlPath)) {
+if (fs.existsSync(rootHtmlPath)) {
   if (force) {
     console.warn(`WARNING: Root HTML file ${rootHtmlPath} already exists and will be overwritten`);
   } else {
@@ -777,13 +695,12 @@ if (existsSync(rootHtmlPath)) {
 }
 
 // Create the apps directory if it doesn't exist
-await fs.promises.mkdir(APPS_DIR, { recursive: true });
+await mkdir(APPS_DIR, { recursive: true });
 
 // Run the app creation process
 try {
   await createApp(targetPath, dataFile, { 
-    force, 
-    rootClass: rootClass || 'Configuration',
+    force,
     title: title || `${appName} Application`,
     modelDefsDir: modelDefsDir
   });

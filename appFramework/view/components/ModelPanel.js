@@ -833,8 +833,16 @@ export class ModelPanel extends BaseComponent {
                 // Create appropriate widget
                 const widget = this._createWidgetFromMetadata(propConfig, value, propDef);
                 
+                // Determine if field is editable - check property definition if not explicitly set
+                let isEditable = propConfig.Editable !== false;
+                
+                // If Editable is not explicitly set in config, check for ReadOnly in property info
+                if (propConfig.Editable === undefined && propDef && propDef.ReadOnly === true) {
+                    isEditable = false;
+                }
+                
                 // Handle non-editable fields differently based on type
-                if (propConfig.Editable === false) {
+                if (!isEditable) {
                     // For non-editable text inputs, replace with bold label
                     if (widget.type === 'text' || widget.type === 'number') {
                         // Create a label instead of an input
@@ -861,8 +869,8 @@ export class ModelPanel extends BaseComponent {
                 cell.appendChild(widget);
                 row.appendChild(cell);
                 
-                // Create binding for this widget if it's not disabled
-                if (propConfig.Editable !== false) {
+                // Create binding for this widget if it's editable
+                if (isEditable) {
                     const app = this._view.getApp();
                     if (app) {
                         const model = app.getModel();

@@ -6,10 +6,10 @@
  * It provides app-specific implementations of AbstractApp methods.
  */
 
-// Import from the appFramework package using relative paths
-import { AbstractApp } from '../../../appFramework/controller/AbstractApp.js';
-import { BasicView } from '../../../appFramework/view/BasicView.js';
-import { EventTypes } from '../../../appFramework/controller/EventTypes.js';
+// Import from the appFramework package
+import { AbstractApp } from 'appFramework/controller/AbstractApp.js';
+import { BasicView } from 'appFramework/view/BasicView.js';
+import { EventTypes } from 'appFramework/controller/EventTypes.js';
 
 // Import any additional components needed
 
