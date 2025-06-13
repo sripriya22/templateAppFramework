@@ -207,7 +207,7 @@ export class AbstractApp {
    * @returns {Promise<Object>} The parsed model definition
    */
   async loadModelDefinition(className) {
-    return this.loadJsonResource(`data-model/${className}.json`);
+    return this.loadJsonResource(`shared/data-model/${className}.json`);
   }
   
   /**
@@ -216,16 +216,7 @@ export class AbstractApp {
    * @returns {Promise<Object>} The parsed view configuration
    */
   async loadViewConfig(viewName) {
-    return this.loadJsonResource(`view/config/${viewName}.json`);
-  }
-  
-  /**
-   * Loads test data JSON file
-   * @param {string} fileName - Optional name of test data file (default: 'testData.json')
-   * @returns {Promise<Object>} The parsed test data
-   */
-  async loadTestData(fileName = 'testData.json') {
-    return this.loadJsonResource(`test-data/${fileName}`);
+    return this.loadJsonResource(`js/view/config/${viewName}.json`);
   }
   
   /**
@@ -315,7 +306,7 @@ export class AbstractApp {
    */
   async loadModelDefinitionJson(className) {
     // Default implementation uses standard path convention
-    return this.loadJsonResource(`data-model/${className}.json`);
+    return this.loadJsonResource(`shared/data-model/${className}.json`);
   }
 
   /**

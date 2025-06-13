@@ -20,17 +20,22 @@ const APPS_DIR = join(ROOT_PATH, 'apps');
 
 // List of files to copy from templates
 const FILES_TO_COPY = [
-  'App.js',
-  'README.md',
-  'package.json'
+  { src: 'App.js', dest: 'js/App.js' },
+  { src: 'README.md', dest: 'README.md' },
+  { src: 'package.json', dest: 'package.json' }
 ];
 
 // List of directories to create
 const DIRS_TO_CREATE = [
-  'data-model',
-  'resources',
-  'view/config',
-  'server/model'
+  'js',
+  'js/view',
+  'js/view/config',
+  'matlab',
+  'matlab/server',
+  'matlab/server/model',
+  'shared',
+  'shared/data-model',
+  'shared/resources'
 ];
 
 // Create a simple read stream wrapper that handles errors better
@@ -192,13 +197,13 @@ async function createApp(targetPath, dataFile, options = {}) {
     // Step 1: Copy the data file (required)
     testDataPath = await copyDataFile(dataFile, targetPath);
     
-    // Step 2: Copy model definitions to the data-model directory
+    // Step 2: Copy model definitions to the shared/data-model directory
     if (options.modelDefsDir) {
-      const dataModelDir = join(targetPath, 'data-model');
+      const dataModelDir = join(targetPath, 'shared/data-model');
       await mkdir(dataModelDir, { recursive: true });
       
-      // Copy model definitions to data-model directory
-      await copyModelDefinitions(options.modelDefsDir, dataModelDir, appName, rootClass);
+      // Copy model definitions to shared/data-model directory
+      await copyModelDefinitions(options.modelDefsDir, targetPath, appName, rootClass);
       
       // Step 2b: Generate MATLAB class files from JSON model definitions
       console.log('Generating MATLAB class files from model definitions...');
@@ -217,8 +222,8 @@ async function createApp(targetPath, dataFile, options = {}) {
     }
     
     // Step 3: Get all model class names
-    // Look in the data-model directory where we copied the model definitions
-    const dataModelDir = join(targetPath, 'data-model');
+    // Look in the shared/data-model directory where we copied the model definitions
+    const dataModelDir = join(targetPath, 'shared/data-model');
     const modelClassNames = await getModelClassNames(dataModelDir);
     if (modelClassNames.length === 0) {
       throw new Error('No model classes found after copying model definitions.');
@@ -229,11 +234,11 @@ async function createApp(targetPath, dataFile, options = {}) {
     
     // Step 5: Generate ModelPanelConfig.json dynamically from model definitions
     console.log('Generating ModelPanelConfig.json...');
-    const modelPanelConfigDir = join(targetPath, 'view', 'config');
+    const modelPanelConfigDir = join(targetPath, 'js', 'view', 'config');
     await mkdir(modelPanelConfigDir, { recursive: true });
     
     try {
-      // Use the specified model definitions directory or the app's data-model directory
+      // Use the specified model definitions directory or the app's shared/data-model directory
       const sourceModelDir = options.modelDefsDir || dataModelDir;
       
       // Generate the model panel configuration
@@ -305,52 +310,55 @@ async function copyDataFile(dataFile, targetPath) {
  * @returns {Promise<void>}
  */
 async function copyModelDefinitions(modelDefsDir, targetPath, appName, rootClassName) {
-  // Validate inputs
-  if (!modelDefsDir) {
-    throw new Error('Model definitions directory is required');
-  }
-  
-  if (!fs.existsSync(modelDefsDir)) {
-    throw new Error(`Model definitions directory not found: ${modelDefsDir}`);
-  }
-  
-  // Create target directory
-  await mkdir(targetPath, { recursive: true });
-  
-  // Get list of JSON files in the source directory
-  const files = await fsPromises.readdir(modelDefsDir);
-  const jsonFiles = files.filter(file => file.endsWith('.json'));
-  
-  if (jsonFiles.length === 0) {
-    throw new Error(`No JSON model definition files found in ${modelDefsDir}`);
-  }
-  
-  // Copy each JSON file without modifying its content
-  let copiedCount = 0;
-  for (const file of jsonFiles) {
-    try {
-      const sourcePath = join(modelDefsDir, file);
-      const destPath = join(targetPath, file);
-      
-      // Copy the file directly without modifying its contents
-      await fsPromises.copyFile(sourcePath, destPath);
-      console.log(`  ✓ Copied model definition: ${destPath}`);
-      copiedCount++;
-    } catch (err) {
-      console.warn(`Warning: Failed to copy ${file}: ${err.message}`);
+  try {
+    if (!modelDefsDir || !fs.existsSync(modelDefsDir)) {
+      console.log('No model definitions directory provided. Skipping model definitions copy.');
+      return;
     }
+    
+    console.log('\nCopying model definitions...');
+    
+    // Get list of JSON files in the source directory
+    const files = fs.readdirSync(modelDefsDir);
+    const jsonFiles = files.filter(file => file.endsWith('.json'));
+    
+    if (jsonFiles.length === 0) {
+      console.log('  - No JSON model definitions found in source directory');
+      return;
+    }
+    
+    // Ensure target directory exists
+    const targetDir = join(targetPath, 'shared/data-model');
+    await mkdir(targetDir, { recursive: true });
+    
+    // Copy each JSON file
+    const copiedFiles = [];
+    for (const file of jsonFiles) {
+      const sourcePath = join(modelDefsDir, file);
+      const targetFilePath = join(targetDir, file);
+      
+      await fsPromises.copyFile(sourcePath, targetFilePath);
+      copiedFiles.push(file);
+      console.log(`  - Copied ${file}`);
+    }
+    
+    if (copiedFiles.length > 0) {
+      console.log(`  - Successfully copied ${copiedFiles.length} model definition files`);
+    }
+  } catch (error) {
+    console.error(`Error copying model definitions: ${error.message}`);
+    throw error;
   }
-  
-  console.log(`  ✓ Successfully copied ${copiedCount} model definition files`);
 }
 
 /**
- * Copy and process all template files
+ * Copy all template files to the app directory
  * @param {string} templatesDir - Path to templates directory
  * @param {string} targetPath - Path to target app directory
  * @param {string} appName - Name of the app
  * @param {string} appTitle - Title of the app
  * @param {string[]} modelClassNames - Array of all model class names
+ * @param {string} rootClassName - Name of the root class
  * @param {string} testDataPath - Relative path to test data file
  * @returns {Promise<void>}
  */
@@ -371,12 +379,15 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
   
   // Copy static files
   for (const file of FILES_TO_COPY) {
-    const sourcePath = join(templatesDir, file);
-    const destPath = join(targetPath, file);
+    const sourcePath = join(templatesDir, file.src);
+    const destPath = join(targetPath, file.dest);
     
     if (!fs.existsSync(sourcePath)) {
       throw new Error(`Template file not found: ${sourcePath}`);
     }
+    
+    // Ensure the destination directory exists
+    await mkdir(dirname(destPath), { recursive: true });
     
     // Read template content
     let content = await readFile(sourcePath, 'utf8');
@@ -425,8 +436,8 @@ async function copyAllTemplateFiles(templatesDir, targetPath, appName, appTitle,
     // But we'll keep the replacements for backwards compatibility
     .replace(/\{\{CSS_PATH\}\}/g, ``)
     .replace(/\{\{IMPORT_PATH\}\}/g, ``)
-    // Set the correct path to the app's main JavaScript file
-    .replace(/\{\{SCRIPT_PATH\}\}/g, `apps/${appName}/App.js`);
+    // Set the correct path to the app's main JavaScript file in the new directory structure
+    .replace(/\{\{SCRIPT_PATH\}\}/g, `apps/${appName}/js/App.js`);
   
   // Write app HTML file to app directory
   const appHtmlPath = join(targetPath, `${appName}.html`);
@@ -706,8 +717,8 @@ try {
   });
   console.log(`\n✅ Successfully created app at ${targetPath}\n`);
   console.log('Next steps:');
-  console.log(`  1. Review ${appName}.html and apps/${appName}/App.js`);
-  console.log(`  2. Update view/config/ModelPanelConfig.json with your model properties`);
+  console.log(`  1. Review ${appName}.html and apps/${appName}/js/App.js`);
+  console.log(`  2. Update js/view/config/ModelPanelConfig.json with your model properties`);
   console.log(`  3. Start a local server to test your app`);
   console.log(`  4. Visit http://localhost:<port>/${appName}.html\n`);
   console.log('For more information, see the README.md file.');
