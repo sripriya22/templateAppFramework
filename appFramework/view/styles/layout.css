@@ -88,9 +88,9 @@
   background-color: var(--panel-background);
   overflow: hidden; /* Changed from auto to hidden */
   position: relative;
-  padding: 16px;
+  padding: 0px;
   border-radius: var(--border-radius);
-  margin: 8px;
+  margin: 0px;
   box-shadow: var(--shadow-light);
 }
 

@@ -56,7 +56,7 @@ export class ModelPanel extends BaseComponent {
         // Create header
         const header = document.createElement('div');
         header.className = 'panel-header';
-        header.textContent = 'Model Editor';
+        header.textContent = 'Editor';
 
         // Create form container
         this.formElement = document.createElement('div');

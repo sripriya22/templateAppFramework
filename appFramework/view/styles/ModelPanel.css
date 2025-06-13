@@ -23,13 +23,13 @@
 }
 
 .model-form {
-    padding: 16px;
+    padding: 0px;
     /* Allow scrolling only when needed */
     overflow: auto;
     /* Take remaining space */
     flex: 1 1 auto;
     /* Ensure proper height calculation */
-    height: calc(100% - 49px); /* Subtract header height */
+    height: calc(100% - var(--header-height));
     /* Hide scrollbar by default */
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE and Edge */
@@ -73,8 +73,9 @@
 }
 
 .array-section-title {
-    font-weight: 600;
+    font-weight: 500;
     margin-bottom: 8px;
+    margin-left: 16px;
     color: #444;
 }
 
