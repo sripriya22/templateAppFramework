@@ -36,13 +36,12 @@ export class ArrayPropertySection extends ModelPanelSection {
             return document.createElement('div');
         }
         
-        // Create array section container
-        const section = document.createElement('div');
+        // Create array section container as fieldset
+        const section = document.createElement('fieldset');
         section.className = 'array-section';
         
-        // Create section header
-        const sectionHeader = document.createElement('h3');
-        sectionHeader.className = 'section-header';
+        // Create section header as legend
+        const sectionHeader = document.createElement('legend');
         sectionHeader.textContent = arrayConfig.Label || this._modelPanel.formatLabel(propertyPath.split('.').pop());
         section.appendChild(sectionHeader);
         

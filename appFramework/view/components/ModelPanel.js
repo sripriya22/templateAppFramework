@@ -149,20 +149,26 @@ export class ModelPanel extends BaseComponent {
         // Validate the configuration against model schema
         this._validateConfig(modelClass);
         
+        // Created sections collection to track sections
+        this._sections = [];
+        
         // Process each section in the configuration
         for (const section of this._config.Sections) {
-            if (!section || !section.Type) {
-                console.warn('Skipping invalid section configuration:', section);
+            if (!section.Type) {
+                console.warn('Section missing Type property, skipping');
                 continue;
             }
             
+            console.log(`Processing section of type ${section.Type}`);
+            
             try {
-                // Create section component based on section type
+                // Create section based on type
                 const sectionComponent = this._createSection(section, model);
                 
                 // Add section component to form if created successfully
                 if (sectionComponent && sectionComponent.element) {
                     this.formElement.appendChild(sectionComponent.element);
+                    this._sections.push(sectionComponent);
                 } else {
                     console.warn(`Failed to create section of type ${section.Type}`);
                 }
@@ -171,44 +177,31 @@ export class ModelPanel extends BaseComponent {
             }
         }
         
-        // Force an update on all DependentBindings
-        this._updateDependentBindings();
+        // Force update on all dependent bindings in each section
+        this._sections.forEach(section => {
+            if (section._updateDependentBindings) {
+                section._updateDependentBindings();
+            }
+        });
     }
     
     /**
-     * Force an update on all DependentBindings by dispatching MODEL_TO_VIEW_PROPERTY_CHANGED events
-     * for each property that might trigger dependencies
+     * Force an update on all DependentBindings in each section
      * @private
+     * @deprecated Moved to individual ModelPanelSection instances
      */
     _updateDependentBindings() {
-        console.log('Forcing update on all DependentBindings');
+        console.log('Delegating dependent binding updates to individual sections');
         
-        if (!this.eventManager) {
-            console.warn('No event manager available to update dependent bindings');
+        if (!this._sections || !this._sections.length) {
+            console.warn('No sections available to update dependent bindings');
             return;
         }
         
-        // Get the model
-        const model = this.eventManager.getModel();
-        if (!model) {
-            console.warn('No model available to update dependent bindings');
-            return;
-        }
-        
-        // Find all bindings managed by this component
-        const allBindings = this.bindings || [];
-        
-        // For each dependent binding, manually trigger handleModelChange
-        // to ensure the initial effect is applied
-        allBindings.forEach(binding => {
-            if (binding instanceof DependentBinding) {
-                console.log(`Updating dependent binding for ${binding.objectPath}.${binding.property}`);
-                
-                // Get the current model value
-                const value = binding.getValueFromModel(model);
-                
-                // Apply the effect directly
-                binding._applyEffect(value);
+        // Ask each section to update its own dependent bindings
+        this._sections.forEach(section => {
+            if (section._updateDependentBindings) {
+                section._updateDependentBindings();
             }
         });
     }

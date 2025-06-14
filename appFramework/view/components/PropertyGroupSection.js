@@ -20,14 +20,13 @@ export class PropertyGroupSection extends ModelPanelSection {
      * @private
      */
     _createPropertyGroup() {
-        // Create group container
-        const group = document.createElement('div');
+        // Create group container as fieldset
+        const group = document.createElement('fieldset');
         group.className = 'property-group';
         
-        // Add group header if name is provided
+        // Add group header as legend if name is provided
         if (this._sectionConfig.GroupName) {
-            const groupHeader = document.createElement('h3');
-            groupHeader.className = 'group-header';
+            const groupHeader = document.createElement('legend');
             groupHeader.textContent = this._sectionConfig.GroupName;
             group.appendChild(groupHeader);
         }

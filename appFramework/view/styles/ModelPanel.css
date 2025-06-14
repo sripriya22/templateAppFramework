@@ -23,7 +23,7 @@
 }
 
 .model-form {
-    padding: 0px;
+    padding: 15px 0 0 0;
     /* Allow scrolling only when needed */
     overflow: auto;
     /* Take remaining space */
@@ -51,32 +51,38 @@
     color: #333;
 }
 
-/* Property group styling */
-.property-group {
+/* Common section styles */
+fieldset {
     margin-bottom: 20px;
+    padding: 12px 0;
+}
+
+/* Property group styling */
+fieldset.property-group {
     border: 1px solid #eaeaea;
     border-radius: 4px;
-    padding: 12px;
 }
 
-.property-group-title {
+fieldset legend {
     font-weight: 600;
-    margin-bottom: 12px;
     color: #444;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 8px;
+    padding: 0 10px;
+    margin-left: 10px;
 }
 
-/* Array section styling - matching property-group style */
-.array-section {
-    margin-bottom: 20px;
+/* Array section styling */
+fieldset.array-section {
+    border: 1px solid rgba(234, 234, 234, 0.3); /* Transparent border but same color scheme */
+    border-radius: 4px;
+    padding: 12px 0;
 }
 
-.array-section-title {
-    font-weight: 500;
-    margin-bottom: 8px;
-    margin-left: 16px;
+/* Ensure array section legends match property group legends */
+fieldset.array-section legend {
+    font-weight: 600;
     color: #444;
+    padding: 0 10px;
+    margin-left: 10px;
 }
 
 /* Table styling */
