@@ -368,12 +368,22 @@ export class ModelPanel extends BaseComponent {
         
         console.log(`Creating visibility dependency for ${propConfig.PropertyPath} on ${dependency.property}`);
         
+        // Get the view's event manager
+        const app = this._view.getApp();
+        if (!app || !app.getModel() || !this.eventManager) {
+            console.warn('Cannot create visibility binding: missing eventManager');
+            return;
+        }
+        
         // Create a dependent binding that controls visibility
+        // Make sure to include eventManager to prevent 'missing required binding options' error
         this.createDependentBinding({
             type: 'visibility',
             objectPath: dependency.objectPath,
             property: dependency.property,
-            view: element.closest('.form-group') // Apply to the form group for proper hiding
+            view: element.closest('.form-group') || element, // Apply to the form group for proper hiding if possible
+            eventManager: this.eventManager,
+            model: app.getModel()
         });
     }
     

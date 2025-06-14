@@ -123,51 +123,31 @@ export class ArrayPropertySection extends ModelPanelSection {
      * @private
      */
     _createCellInput(propType, propValue, fullPath, propConfig) {
-        let input;
+        // Get property definition for read-only check
+        let propDef = null;
         
-        switch (propType) {
-            case 'boolean':
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.checked = Boolean(propValue);
-                break;
-                
-            case 'number':
-                input = document.createElement('input');
-                input.type = 'number';
-                input.value = propValue !== null && propValue !== undefined ? propValue : '';
-                input.step = 'any';
-                break;
-                
-            default:
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = propValue !== null && propValue !== undefined ? String(propValue) : '';
-                break;
-        }
-        
-        input.className = `${propType}-input`;
-        
-        // Determine if the property should be editable by default
-        let isEditable = propConfig.Editable !== false; // Default to editable unless explicitly set to false
-        
-        // If Editable is undefined, check if property is marked as ReadOnly in property definition
-        if (propConfig.Editable === undefined && this._model && this._modelPanel) {
-            // Get property definition using ModelPanel's robust _getPropertyDefinition method
-            const propDef = this._modelPanel._getPropertyDefinition(this._model._className, propConfig.PropertyPath);
+        // For array items, we need to determine the class of the array items
+        // by first getting the array property definition from the parent model
+        if (this._model && this._sectionConfig && this._sectionConfig.PropertyPath && propConfig.PropertyPath) {
+            // First, get the array property definition from the parent model
+            const arrayPath = this._sectionConfig.PropertyPath;
+            const arrayPropDef = this._getPropertyDefinition(this._model._className, arrayPath);
             
-            if (propDef && propDef.ReadOnly === true) {
-                console.log(`Property ${propConfig.PropertyPath} is ReadOnly according to definition`);
-                isEditable = false;
+            if (arrayPropDef) {
+                console.log(`Found array property definition for ${arrayPath}:`, arrayPropDef);
+                
+                propDef = this._getPropertyDefinition(arrayPropDef.Type, propConfig.PropertyPath);
             }
         }
         
-        // Apply styles and attributes based on editability
-        if (!isEditable) {
-            input.disabled = true;
-            input.classList.add('disabled');
-            input.classList.add('non-editable-field');
-        }
+        // Create input using centralized method
+        const input = this._createPropertyInput(
+            propType, 
+            propValue, 
+            { 
+                isEditable: this._isPropertyEditable(propConfig, propDef) 
+            }
+        );
         
         // Add binding if path exists
         if (fullPath) {
@@ -176,21 +156,19 @@ export class ArrayPropertySection extends ModelPanelSection {
             const property = pathParts.pop();
             const objectPath = pathParts.join('.');
             
-            // Create binding
-            this._modelPanel.createBinding({
+            // Create binding using centralized method
+            this._createBinding({
                 model: this._model,
                 objectPath: objectPath,
                 property: property,
                 view: input,
-                viewAttribute: propType === 'boolean' ? 'checked' : 'value',
-                viewEvent: propType === 'boolean' ? 'change' : 'change',
                 parser: propType === 'number' ? val => parseFloat(val) : val => val
             });
             
             // Create dependent bindings if property config exists
             if (propConfig) {
                 console.log('Creating dependent bindings for array item:', fullPath, propConfig);
-                this._modelPanel._createDependentBindings(this._model, objectPath, propConfig, input);
+                this._createDependentBindings(this._model, objectPath, propConfig, input);
             }
         }
         
