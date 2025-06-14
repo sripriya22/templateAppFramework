@@ -64,6 +64,45 @@ export class BaseComponent {
     }
     
     /**
+     * Create a dependent binding that applies effects based on property values
+     * @param {Object} options - Configuration for the dependent binding
+     * @param {string} options.type - Type of effect ('editable', 'visibility', etc)
+     * @param {string} options.objectPath - Path to object containing property to observe
+     * @param {string} options.property - Property to observe
+     * @param {HTMLElement} options.view - Element to apply effects to
+     * @param {Function} [options.predicate] - Optional function to transform value
+     * @returns {Object} The created dependent binding
+     */
+    createDependentBinding(options) {
+        if (!this._view) {
+            console.error('Cannot create dependent binding: view not available');
+            return null;
+        }
+        
+        const app = this._view.getApp();
+        if (!app) {
+            console.error('Cannot create dependent binding: app not available');
+            return null;
+        }
+        
+        const bindingManager = app.getBindingManager();
+        if (!bindingManager) {
+            console.error('Cannot create dependent binding: binding manager not available');
+            return null;
+        }
+        
+        const binding = bindingManager.createDependentBinding({
+            ...options,
+            model: app.getModel()
+        });
+        
+        if (binding) {
+            this._bindings.push(binding);
+        }
+        return binding;
+    }
+    
+    /**
      * Create a component binding that updates the entire component when any model property changes
      * @param {Function} updateCallback - Function to call when model changes, receives (model, changedPath)
      * @returns {Object} The created component binding

@@ -719,7 +719,7 @@ export class ClientModel extends EventListener {
     
     // Prepare method arguments using PascalCase field names for consistency in server communication
     const methodArgs = {
-      MethodName: 'handle_client_property_changed', // Method to call
+      MethodName: 'updateProperty', // Method to call
       ObjectPath: objectPath,
       Args: { 
         PropertyName: propertyName,

@@ -75,7 +75,8 @@ export class Toolstrip extends BaseComponent {
             iconElement.className = 'button-icon';
             
             // Check if the icon is a URL or a class name
-            if (icon.startsWith('http') || icon.startsWith('./') || icon.startsWith('/')) {
+            // Check for URL-like patterns or file paths
+            if (icon.includes('/') || icon.includes('.')) {
                 const iconImg = document.createElement('img');
                 iconImg.src = icon;
                 iconImg.alt = '';

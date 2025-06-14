@@ -3,6 +3,7 @@
  */
 import { Binding } from './Binding.js';
 import { ComponentBinding } from './ComponentBinding.js';
+import { DependentBinding } from './DependentBinding.js';
 import { EventTypes } from '../controller/EventTypes.js';
 import { ModelPathUtils } from '../utils/ModelPathUtils.js';
 
@@ -159,6 +160,44 @@ export class BindingManager {
    */
   getBindingsForElement(element) {
     return this.bindings.filter(binding => binding.element === element);
+  }
+  
+  /**
+   * Create a dependent binding that applies effects based on property values
+   * @param {Object} options - Binding options
+   * @param {string} options.type - Type of dependent binding ('editable', 'visibility', etc)
+   * @param {Object} options.model - The model object to bind to
+   * @param {string} options.objectPath - The path to the object containing the property
+   * @param {string} options.property - The property to observe
+   * @param {HTMLElement} options.view - The view element to apply effects to
+   * @param {Function} [options.predicate] - Optional function to transform property value to boolean
+   * @returns {DependentBinding} The created binding
+   */
+  createDependentBinding(options) {
+    // Add the event manager to the options
+    const bindingOptions = {
+      ...options,
+      eventManager: this.eventManager
+    };
+    
+    let binding;
+    
+    // Create the appropriate type of dependent binding
+    if (options.type === 'editable') {
+      binding = DependentBinding.createEditableBinding(bindingOptions, options.predicate);
+    } else if (options.type === 'visibility') {
+      binding = DependentBinding.createVisibilityBinding(bindingOptions, options.predicate);
+    } else {
+      throw new Error(`Unknown dependent binding type: ${options.type}`);
+    }
+    
+    // Store the binding
+    this.bindings.push(binding);
+    
+    // Log binding creation
+    console.log(`Created ${options.type} dependent binding for ${options.objectPath}.${options.property} to element`, options.view);
+    
+    return binding;
   }
   
   /**

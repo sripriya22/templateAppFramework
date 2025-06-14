@@ -18,6 +18,9 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
+    "clean-css": "5.3.3",
+    "fs-extra": "11.3.0",
+    "terser": "5.42.0",
     "whatwg-fetch": "^3.6.20"
   },
   "devDependencies": {

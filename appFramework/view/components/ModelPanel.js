@@ -1,11 +1,15 @@
 import { BaseComponent } from './BaseComponent.js';
 import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
+import { PropertyGroupSection } from './PropertyGroupSection.js';
+import { ArrayPropertySection } from './ArrayPropertySection.js';
+import { DependentBinding } from '../../binding/DependentBinding.js';
 
 // CSS is now loaded in the main HTML file
 // This prevents duplicate loading and path resolution issues
 
 /**
  * ModelPanel component for displaying form fields for model properties
+ * Uses section components to display different types of content
  */
 export class ModelPanel extends BaseComponent {
     /**
@@ -21,8 +25,7 @@ export class ModelPanel extends BaseComponent {
         
         // Store component reference on element for layout access
         this.element.__component = this;
-        
-       this._configLoaded = true;
+        this._configLoaded = true;
     }
     
     /**
@@ -103,8 +106,6 @@ export class ModelPanel extends BaseComponent {
         } else {
             console.error('No configuration available for model panel');
         }
-        
-        console.log(`ModelPanel.updateModel completed, created ${this._bindings.length} bindings`);
     }
     
     /**
@@ -114,86 +115,20 @@ export class ModelPanel extends BaseComponent {
      */
     _validateConfig(modelClass) {
         if (!this._config) {
-            throw new Error('No configuration provided to ModelPanel');
+            console.error('No configuration available to validate');
+            return;
         }
         
-        if (!modelClass) {
-            throw new Error('Model class name is required for validation');
+        // Basic validation: check for required configuration properties
+        if (!this._config.Sections || !Array.isArray(this._config.Sections)) {
+            console.error('Invalid configuration: missing or invalid Sections array');
+            return;
         }
         
-        const app = this._view.getApp();
-        if (!app) {
-            throw new Error('App not available');
-        }
-        
-        const clientModel = app.getModel();
-        if (!clientModel) {
-            throw new Error('Client model not available');
-        }
-        
-        const modelManager = clientModel.modelManager;
-        if (!modelManager) {
-            throw new Error('Model manager not available');
-        }
-        
-        // Validate property groups
-        if (this._config.PropertyGroups) {
-            this._config.PropertyGroups.forEach(group => {
-                if (!group.Properties || !Array.isArray(group.Properties)) {
-                    throw new Error(`Property group '${group.GroupName}' has no properties array`);
-                }
-                
-                group.Properties.forEach(prop => {
-                    if (!prop.PropertyPath) {
-                        throw new Error(`Property in group '${group.GroupName}' is missing PropertyPath`);
-                    }
-                    
-                    // Check if property exists in model definition
-                    const propInfo = this._getPropertyDefinition(modelClass, prop.PropertyPath);
-                    if (!propInfo) {
-                        throw new Error(`Property '${prop.PropertyPath}' not found in model class '${modelClass}'`);
-                    }
-                });
-            });
-        }
-        
-        // Validate array configs
-        if (this._config.ArrayConfigs) {
-            this._config.ArrayConfigs.forEach(arrayConfig => {
-                if (!arrayConfig.PropertyPath) {
-                    throw new Error('Array config is missing PropertyPath');
-                }
-                
-                // Check if array property exists in model definition
-                const arrayPropInfo = this._getPropertyDefinition(modelClass, arrayConfig.PropertyPath);
-                if (!arrayPropInfo) {
-                    throw new Error(`Array property '${arrayConfig.PropertyPath}' not found in model class '${modelClass}'`);
-                }
-                
-                // Ensure it's actually an array
-                if (!arrayPropInfo.IsArray) {
-                    throw new Error(`Property '${arrayConfig.PropertyPath}' in model class '${modelClass}' is not an array`);
-                }
-                
-                // Get the type of array elements
-                const elementType = arrayPropInfo.Type;
-                
-                // Validate display properties against the element type
-                if (arrayConfig.DisplayProperties && Array.isArray(arrayConfig.DisplayProperties)) {
-                    arrayConfig.DisplayProperties.forEach(prop => {
-                        if (!prop.PropertyPath) {
-                            throw new Error(`Display property in array config '${arrayConfig.PropertyPath}' is missing PropertyPath`);
-                        }
-                        
-                        // Check if property exists in element type definition
-                        const propInfo = this._getPropertyDefinition(elementType, prop.PropertyPath);
-                        if (!propInfo) {
-                            throw new Error(`Property '${prop.PropertyPath}' not found in element type '${elementType}' for array '${arrayConfig.PropertyPath}'`);
-                        }
-                    });
-                }
-            });
-        }
+        // Log validation success and configuration summary
+        console.log(`Configuration validated for model class ${modelClass}`, {
+            sections: this._config.Sections.length
+        });
     }
     
     /**
@@ -202,80 +137,244 @@ export class ModelPanel extends BaseComponent {
      * @private
      */
     _buildFormFromConfig(model) {
-        // Validate the configuration against the model definitions
-        if (this._config.ModelClass) {
+        if (!this._config || !this._config.Sections) {
+            console.error('No valid configuration available for form building');
+            return;
+        }
+        
+        // Get model class for validation
+        const modelClass = model._className;
+        console.log(`Building form from config for model class: ${modelClass}`);
+        
+        // Validate the configuration against model schema
+        this._validateConfig(modelClass);
+        
+        // Process each section in the configuration
+        for (const section of this._config.Sections) {
+            if (!section || !section.Type) {
+                console.warn('Skipping invalid section configuration:', section);
+                continue;
+            }
+            
             try {
-                this._validateConfig(this._config.ModelClass);
+                // Create section component based on section type
+                const sectionComponent = this._createSection(section, model);
+                
+                // Add section component to form if created successfully
+                if (sectionComponent && sectionComponent.element) {
+                    this.formElement.appendChild(sectionComponent.element);
+                } else {
+                    console.warn(`Failed to create section of type ${section.Type}`);
+                }
             } catch (error) {
-                console.error('ModelPanel configuration validation failed:', error.message);
-                throw error; // Re-throw to expose the implementation bug
+                console.error(`Error creating section of type ${section.Type}:`, error);
             }
         }
         
-        // Check if the model class matches the config
-        if (this._config.ModelClass && model._className !== this._config.ModelClass) {
-            console.warn(`Model class mismatch: expected ${this._config.ModelClass}, got ${model._className}`);
+        // Force an update on all DependentBindings
+        this._updateDependentBindings();
+    }
+    
+    /**
+     * Force an update on all DependentBindings by dispatching MODEL_TO_VIEW_PROPERTY_CHANGED events
+     * for each property that might trigger dependencies
+     * @private
+     */
+    _updateDependentBindings() {
+        console.log('Forcing update on all DependentBindings');
+        
+        if (!this.eventManager) {
+            console.warn('No event manager available to update dependent bindings');
+            return;
         }
         
-        // Process property groups
-        if (this._config.PropertyGroups) {
-            // Sort groups by order if specified
-            const sortedGroups = [...this._config.PropertyGroups].sort((a, b) => 
-                (a.Order || 0) - (b.Order || 0)
-            );
-            
-            sortedGroups.forEach(group => {
-                this._createPropertyGroup(group, model);
-            });
+        // Get the model
+        const model = this.eventManager.getModel();
+        if (!model) {
+            console.warn('No model available to update dependent bindings');
+            return;
         }
         
-        // Process array configs
-        if (this._config.ArrayConfigs) {
-            // Sort array configs by order if specified
-            const sortedArrayConfigs = [...this._config.ArrayConfigs].sort((a, b) => 
-                (a.Order || 0) - (b.Order || 0)
-            );
-            
-            sortedArrayConfigs.forEach(arrayConfig => {
-                this._createArraySection(arrayConfig, model);
-            });
+        // Find all bindings managed by this component
+        const allBindings = this.bindings || [];
+        
+        // For each dependent binding, manually trigger handleModelChange
+        // to ensure the initial effect is applied
+        allBindings.forEach(binding => {
+            if (binding instanceof DependentBinding) {
+                console.log(`Updating dependent binding for ${binding.objectPath}.${binding.property}`);
+                
+                // Get the current model value
+                const value = binding.getValueFromModel(model);
+                
+                // Apply the effect directly
+                binding._applyEffect(value);
+            }
+        });
+    }
+    
+    /**
+     * Create a section based on its type
+     * @param {Object} section - The section configuration
+     * @param {Object} model - The model data
+     * @private
+     */
+    _createSection(section, model) {
+        console.log('ModelPanel._createSection called with section type:', section.Type, 'for path:', section.PropertyPath || section.GroupName);
+        console.log('Full section config:', JSON.stringify(section));
+        console.log('Model object type:', model ? model._className : 'null');
+        
+        switch (section.Type) {
+            case 'PropertyGroup':
+                // Create and return a PropertyGroupSection
+                console.log('Creating PropertyGroupSection', section);
+                return new PropertyGroupSection(this, section, model);
+                
+            case 'ArrayProperty':
+                // Create and return an ArrayPropertySection
+                console.log('Creating ArrayPropertySection for path:', section.PropertyPath);
+                const arraySection = new ArrayPropertySection(this, section, model);
+                console.log('ArrayPropertySection created:', arraySection ? 'success' : 'failed');
+                return arraySection;
+                
+            default:
+                // Unknown section type
+                console.warn(`Unknown section type: ${section.Type}`);
+                return null;
         }
     }
     
     /**
-     * Create a property group from configuration
-     * @param {Object} group - The group configuration
-     * @param {Object} model - The model data
+     * Parse a dependency expression from the config
+     * @param {string|boolean} expression - The expression (e.g. "${Use}" or true/false)
+     * @param {string} objectPath - The current object path for context
+     * @returns {Object|null} Parsed dependency or null if not a dependency
      * @private
      */
-    _createPropertyGroup(group, model) {
-        // Create fieldset for the group
-        const fieldset = document.createElement('fieldset');
-        fieldset.className = 'form-object';
+    _parseDependencyExpression(expression, objectPath) {
+        console.log('Parsing expression:', expression, 'for path:', objectPath);
         
-        // Add legend
-        const legend = document.createElement('legend');
-        legend.textContent = group.GroupName;
-        fieldset.appendChild(legend);
+        // Handle boolean values directly
+        if (typeof expression === 'boolean') {
+            console.log('Expression is a boolean, not a dependency');
+            return null; // Not a dependency, just a static value
+        }
         
-        // Process properties
-        const sortedProperties = [...group.Properties].sort((a, b) => 
-            (a.Order || 0) - (b.Order || 0)
-        );
-        
-        sortedProperties.forEach(propConfig => {
-            // Get property value from model
-            const value = ModelPathUtils.getValueFromObjectPath(model, propConfig.PropertyPath);
+        // Check for dependency expression format: ${PropName}
+        if (typeof expression === 'string' && expression.startsWith('${') && expression.endsWith('}')) {
+            // Extract property name between ${ and }
+            const propertyName = expression.substring(2, expression.length - 1).trim();
+            console.log('Found property reference:', propertyName);
             
-            // Get property definition from model class
-            const propDef = this._getPropertyDefinition(model._className, propConfig.PropertyPath);
-            
-            // Create field based on configuration and property definition
-            this._createConfiguredField(model, propConfig.PropertyPath, propConfig, fieldset);
+            // Return the dependency config
+            return {
+                property: propertyName,
+                objectPath: objectPath
+            };
+        }
+        
+        console.log('Not a dependency expression');
+        return null;
+    }
+    
+    /**
+     * Create dependent bindings for a field based on property config
+     * @param {Object} model - The model object
+     * @param {string} objectPath - The path to the object
+     * @param {Object} propConfig - The property configuration
+     * @param {HTMLElement} element - The element to apply effects to
+     * @private
+     */
+    _createDependentBindings(model, objectPath, propConfig, element) {
+        const app = this._view.getApp();
+        if (!app || !app.getModel()) return;
+        
+        // Debug the incoming property config
+        console.log('Creating dependent bindings for', objectPath, propConfig);
+        
+        // Process editability dependency
+        this._createEditabilityBinding(model, objectPath, propConfig, element);
+        
+        // Process visibility dependency (if implemented)
+        this._createVisibilityBinding(model, objectPath, propConfig, element);
+        
+        // Other dependent bindings can be added here
+    }
+    
+    /**
+     * Create editability binding if the Editable property is a reference
+     * @param {Object} model - The model object
+     * @param {string} objectPath - The path to the object
+     * @param {Object} propConfig - The property configuration
+     * @param {HTMLElement} element - The element to apply effects to
+     * @private
+     */
+    _createEditabilityBinding(model, objectPath, propConfig, element) {
+        console.log('Checking editability binding for', propConfig);
+        
+        // Only process if Editable is defined and not a simple boolean
+        if (propConfig.Editable === undefined) {
+            console.log('No Editable property defined');
+            return;
+        }
+        
+        // If it's a boolean, apply static editability
+        if (typeof propConfig.Editable === 'boolean') {
+            console.log('Static editability:', propConfig.Editable);
+            element.disabled = !propConfig.Editable;
+            if (!propConfig.Editable) {
+                element.classList.add('disabled');
+            } else {
+                element.classList.remove('disabled');
+            }
+            return;
+        }
+        
+        // Check if Editable references another property
+        const dependency = this._parseDependencyExpression(propConfig.Editable, objectPath);
+        if (!dependency) {
+            console.log('Not a valid dependency expression:', propConfig.Editable);
+            return;
+        }
+        
+        console.log(`Creating editable dependency for ${propConfig.PropertyPath} on ${dependency.objectPath}.${dependency.property}`);
+        
+        // Create a dependent binding that controls editability
+        this.createDependentBinding({
+            type: 'editable',
+            objectPath: dependency.objectPath,
+            property: dependency.property,
+            view: element
         });
+    }
+    
+    /**
+     * Create visibility binding if the Visible property is a reference
+     * @param {Object} model - The model object
+     * @param {string} objectPath - The path to the object
+     * @param {Object} propConfig - The property configuration
+     * @param {HTMLElement} element - The element to apply effects to
+     * @private
+     */
+    _createVisibilityBinding(model, objectPath, propConfig, element) {
+        // Only process if Visible is defined and not a simple boolean
+        if (propConfig.Visible === undefined || typeof propConfig.Visible === 'boolean') {
+            return;
+        }
         
-        // Add to form container
-        this.formElement.appendChild(fieldset);
+        // Check if Visible references another property
+        const dependency = this._parseDependencyExpression(propConfig.Visible, objectPath);
+        if (!dependency) return;
+        
+        console.log(`Creating visibility dependency for ${propConfig.PropertyPath} on ${dependency.property}`);
+        
+        // Create a dependent binding that controls visibility
+        this.createDependentBinding({
+            type: 'visibility',
+            objectPath: dependency.objectPath,
+            property: dependency.property,
+            view: element.closest('.form-group') // Apply to the form group for proper hiding
+        });
     }
     
     /**
@@ -306,638 +405,126 @@ export class ModelPanel extends BaseComponent {
         // Create an input field based on the property type, widget type, and editability
         let input;
         // Use property definition type info if available, otherwise fallback to inference
-        const widgetType = propConfig.widget || this._getDefaultWidgetType(value, propConfig, propDef);
+        const widgetType = propConfig.WidgetType || this._getDefaultWidgetType(value, propConfig, propDef);
         console.log(`Widget type for ${propPath}: ${widgetType}`);
         
         // Check if property is explicitly set as editable/non-editable in config
         // If not specified, check if it's marked as ReadOnly in property info
         let isEditable = propConfig.Editable !== false;
         
-        // If Editable is not explicitly set in config, check for ReadOnly in property info
-        if (propConfig.Editable === undefined) {
-            if (propDef.ReadOnly === true) {
-                isEditable = false;
-            }
+        // Create the appropriate widget based on type
+        switch (widgetType) {
+            case 'checkbox':
+                input = document.createElement('input');
+                input.type = 'checkbox';
+                input.checked = !!value;
+                if (!isEditable) input.disabled = true;
+                break;
+            case 'select':
+                // Implementation for select dropdown
+                input = document.createElement('select');
+                if (!isEditable) input.disabled = true;
+                
+                // Add options from property definition if available
+                if (propDef && propDef.options) {
+                    propDef.options.forEach(option => {
+                        const optElement = document.createElement('option');
+                        optElement.value = option.value || option;
+                        optElement.textContent = option.label || option;
+                        input.appendChild(optElement);
+                    });
+                }
+                input.value = value || '';
+                break;
+            case 'textarea':
+                input = document.createElement('textarea');
+                input.value = value || '';
+                if (!isEditable) input.disabled = true;
+                break;
+            case 'number':
+                input = document.createElement('input');
+                input.type = 'number';
+                input.value = value || '';
+                if (!isEditable) input.disabled = true;
+                
+                // Add min/max if in property definition
+                if (propDef) {
+                    if (propDef.min !== undefined) input.min = propDef.min;
+                    if (propDef.max !== undefined) input.max = propDef.max;
+                }
+                break;
+            case 'text':
+            default:
+                input = document.createElement('input');
+                input.type = 'text';
+                input.value = value !== undefined && value !== null ? value : '';
+                if (!isEditable) input.disabled = true;
         }
         
-        // Extract objectPath and property from propPath
+        // Add to form group
+        formGroup.appendChild(input);
+        
+        // Add to container
+        container.appendChild(formGroup);
+
+        // Create binding for this field
         const pathParts = propPath.split('.');
         const property = pathParts.pop();
         const objectPath = pathParts.length > 0 ? pathParts.join('.') : '';
         
-        // For non-editable fields (except checkboxes), create a span instead of an input
-        if (!isEditable && widgetType !== 'checkbox') {
-            input = document.createElement('span');
-            input.className = 'non-editable-field';
-            input.textContent = value !== undefined && value !== null ? value : '';
-            
-            // We still create a binding for non-editable fields to update the display
-            const app = this._view.getApp();
-            if (app) {
-                app.bindingManager.createBinding({
-                    view: input,
-                    viewAttribute: 'textContent',
-                    objectPath: objectPath,
-                    property: property,
-                    formatter: val => val || ''
-                });
-            }
-        } else {
-            // For editable fields or checkboxes, create the appropriate input
-            switch (widgetType) {
-                case 'checkbox':
-                    input = document.createElement('input');
-                    input.type = 'checkbox';
-                    input.className = 'form-check-input';
-                    input.checked = Boolean(value);
-                    
-                    // Create binding for checkbox
-                    const app = this._view.getApp();
-                    if (app) {
-                        app.bindingManager.createBinding({
-                            view: input,
-                            viewAttribute: 'checked',
-                            viewEvent: 'change',
-                            objectPath: objectPath,
-                            property: property,
-                            parser: val => Boolean(val),
-                            formatter: val => Boolean(val)
-                        });
-                    }
-                    break;
-                    
-                case 'number':
-                    input = document.createElement('input');
-                    input.type = 'number';
-                    input.className = 'form-control';
-                    input.value = value !== undefined && value !== null ? value : '';
-                    
-                    // Add min/max/step if specified
-                    if (propDef && propDef.Min !== undefined) input.min = propDef.Min;
-                    if (propDef && propDef.Max !== undefined) input.max = propDef.Max;
-                    if (propDef && propDef.Step !== undefined) input.step = propDef.Step;
-                    if (propConfig.min !== undefined) input.min = propConfig.min;
-                    if (propConfig.max !== undefined) input.max = propConfig.max;
-                    if (propConfig.step !== undefined) input.step = propConfig.step;
-                    
-                    // Create binding for number input
-                    const numApp = this._view.getApp();
-                    if (numApp) {
-                        numApp.bindingManager.createBinding({
-                            view: input,
-                            viewAttribute: 'value',
-                            viewEvent: 'change',
-                            objectPath: objectPath,
-                            property: property,
-                            parser: val => {
-                                const num = parseFloat(val);
-                                return isNaN(num) ? 0 : num;
-                            },
-                            formatter: val => val !== undefined && val !== null ? val.toString() : ''
-                        });
-                    }
-                    break;
-                    
-                case 'select':
-                    input = document.createElement('select');
-                    input.className = 'form-control';
-                    
-                    // Add options - first check if we have ValidValues from the property definition
-                    if (propDef && propDef.ValidValues && Array.isArray(propDef.ValidValues) && propDef.ValidValues.length > 0) {
-                        // Use ValidValues from the property definition
-                        propDef.ValidValues.forEach(validValue => {
-                            const optionEl = document.createElement('option');
-                            optionEl.value = validValue;
-                            optionEl.textContent = validValue;
-                            if (validValue === value) {
-                                optionEl.selected = true;
-                            }
-                            input.appendChild(optionEl);
-                        });
-                    } 
-                    // Fallback to options from propConfig if available
-                    else if (propConfig.options) {
-                        propConfig.options.forEach(option => {
-                            const optionEl = document.createElement('option');
-                            optionEl.value = option.value;
-                            optionEl.textContent = option.label || option.value;
-                            if (option.value === value) {
-                                optionEl.selected = true;
-                            }
-                            input.appendChild(optionEl);
-                        });
-                    }
-                    
-                    // Create binding for select input
-                    const selectApp = this._view.getApp();
-                    if (selectApp) {
-                        selectApp.bindingManager.createBinding({
-                            view: input,
-                            viewAttribute: 'value',
-                            viewEvent: 'change',
-                            objectPath: objectPath,
-                            property: property
-                        });
-                    }
-                    break;
-                    
-                case 'textarea':
-                    input = document.createElement('textarea');
-                    input.className = 'form-control';
-                    input.value = value !== undefined && value !== null ? value : '';
-                    
-                    // Create binding for textarea
-                    const textareaApp = this._view.getApp();
-                    if (textareaApp) {
-                        textareaApp.bindingManager.createBinding({
-                            view: input,
-                            viewAttribute: 'value',
-                            viewEvent: 'change',
-                            objectPath: objectPath,
-                            property: property,
-                            formatter: val => val || ''
-                        });
-                    }
-                    break;
-                    
-                default:
-                    // Default to text input
-                    input = document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'form-control';
-                    input.value = value !== undefined && value !== null ? value : '';
-                    
-                    // Create binding for text input
-                    const defaultApp = this._view.getApp();
-                    if (defaultApp) {
-                        defaultApp.bindingManager.createBinding({
-                            view: input,
-                            viewAttribute: 'value',
-                            viewEvent: 'change',
-                            objectPath: objectPath,
-                            property: property,
-                            formatter: val => val !== undefined && val !== null ? val.toString() : ''
-                        });
-                    }
-            }
-        }
+        const app = this._view.getApp();
         
-        // Add any additional attributes from propConfig
-        if (propConfig.attributes) {
-            for (const [attr, val] of Object.entries(propConfig.attributes)) {
-                input.setAttribute(attr, val);
-            }
-        }
+        // Create binding with the view's app model
+        this.createBinding({
+            model: app.getModel(),
+            objectPath: objectPath,
+            property: property,
+            view: input,
+            viewAttribute: widgetType === 'checkbox' ? 'checked' : 'value',
+            viewEvent: widgetType === 'checkbox' ? 'change' : 'blur',
+            parser: widgetType === 'number' ? val => Number(val) : val => val
+        });
         
-        // Add input to form group
-        formGroup.appendChild(input);
-        
-        // Add form group to container
-        container.appendChild(formGroup);
+        // Process any dependent bindings for this field
+        this._createDependentBindings(model, objectPath, propConfig, input);
     }
     
     /**
-     * Create a widget based on metadata
-     * @param {Object} propConfig - The property configuration
+     * Helper methods to determine widget type based on value and config
      * @param {*} value - The property value
+     * @param {Object} propConfig - The property configuration
      * @param {Object} propDef - The property definition
-     * @returns {HTMLElement} The created widget
+     * @returns {string} The widget type to use
      * @private
      */
-    _createWidgetFromMetadata(propConfig, value, propDef) {
-        // Default to text input if no property definition
-        if (!propDef) {
-            const widget = document.createElement('input');
-            widget.type = 'text';
-            widget.value = value !== undefined && value !== null ? String(value) : '';
-            return widget;
-        }
-        
-        // Create widget based on property type and configuration
-        let widget;
-        
-        // Check if widget type is explicitly specified in config
+    _getDefaultWidgetType(value, propConfig, propDef) {
+        // If widget type specified in config, use that
         if (propConfig.WidgetType) {
-            widget = this._createWidgetByType(propConfig.WidgetType, value, propDef, propConfig);
-        } else {
-            // Infer widget type from property definition
-            if (propDef.IsPrimitive) {
-                switch (propDef.Type.toLowerCase()) {
-                    case 'boolean':
-                        widget = this._createWidgetByType('checkbox', value, propDef, propConfig);
-                        break;
-                        
-                    case 'number':
-                        widget = this._createWidgetByType('number', value, propDef, propConfig);
-                        break;
-                        
-                    case 'string':
-                        // Check if it has enum values for dropdown
-                        if (propDef.Enum && propDef.Enum.length > 0) {
-                            widget = this._createWidgetByType('dropdown', value, propDef, propConfig);
-                        } else {
-                            widget = this._createWidgetByType('text', value, propDef, propConfig);
-                        }
-                        break;
-                        
-                    default:
-                        widget = this._createWidgetByType('text', value, propDef, propConfig);
-                }
-            } else {
-                // For non-primitive types, create a read-only field
-                widget = document.createElement('input');
-                widget.type = 'text';
-                widget.value = '[Object]';
-                widget.readOnly = true;
-            }
+            return propConfig.WidgetType;
         }
         
-        return widget;
-    }
-    
-    /**
-     * Create a widget by type
-     * @param {string} widgetType - The widget type
-     * @param {*} value - The property value
-     * @param {Object} propDef - The property definition
-     * @param {Object} propConfig - The property configuration
-     * @returns {HTMLElement} The created widget
-     * @private
-     */
-    _createWidgetByType(widgetType, value, propDef, propConfig) {
-        let widget;
+        // If property definition has a widget type, use that
+        if (propDef && propDef.widget) {
+            return propDef.widget;
+        }
         
-        switch (widgetType) {
-            case 'text':
-                widget = document.createElement('input');
-                widget.type = 'text';
-                widget.value = value !== undefined && value !== null ? String(value) : '';
-                break;
-                
+        // Otherwise infer based on value type
+        const valueType = this.getType(value);
+        
+        switch (valueType) {
+            case 'boolean':
+                return 'checkbox';
             case 'number':
-                widget = document.createElement('input');
-                widget.type = 'number';
-                widget.value = value !== undefined && value !== null ? String(value) : '';
-                if (propDef.Min !== undefined) widget.min = propDef.Min;
-                if (propDef.Max !== undefined) widget.max = propDef.Max;
-                break;
-                
-            case 'checkbox':
-                widget = document.createElement('input');
-                widget.type = 'checkbox';
-                widget.checked = Boolean(value);
-                break;
-                
-            case 'dropdown':
-                widget = document.createElement('select');
-                
-                // Add options
-                const options = propConfig.Options || propDef.Enum || [];
-                options.forEach(option => {
-                    const optionElement = document.createElement('option');
-                    optionElement.value = option;
-                    optionElement.textContent = option;
-                    widget.appendChild(optionElement);
-                });
-                
-                widget.value = value !== undefined && value !== null ? String(value) : '';
-                break;
-                
-            case 'textarea':
-                widget = document.createElement('textarea');
-                widget.value = value !== undefined && value !== null ? String(value) : '';
-                break;
-                
+                return 'number';
+            case 'object':
+                // Complex objects get handled separately
+                return null;
+            case 'array':
+                // Arrays get handled separately
+                return null;
             default:
-                // Default to text input
-                widget = document.createElement('input');
-                widget.type = 'text';
-                widget.value = value !== undefined && value !== null ? String(value) : '';
+                return 'text';
         }
-        
-        return widget;
-    }
-    
-    /**
-     * Create an array section from configuration
-     * @param {Object} arrayConfig - The array configuration
-     * @param {Object} model - The model data
-     * @private
-     */
-    _createArraySection(arrayConfig, model) {
-        // Get array from model
-        const array = ModelPathUtils.getValueFromObjectPath(model, arrayConfig.PropertyPath);
-        
-        if (!array || !Array.isArray(array)) {
-            console.warn(`Property ${arrayConfig.PropertyPath} is not an array or doesn't exist`);
-            return;
-        }
-        
-        // Create section container with title outside the box (similar to property groups)
-        const sectionContainer = document.createElement('div');
-        sectionContainer.className = 'array-section';
-        
-        // Add section title (outside the box)
-        const sectionTitle = document.createElement('div');
-        sectionTitle.className = 'array-section-title';
-        sectionTitle.textContent = arrayConfig.Label || this.formatLabel(arrayConfig.PropertyPath);
-        sectionContainer.appendChild(sectionTitle);
-        
-        // Create container for the table (the box itself)
-        const container = document.createElement('div');
-        container.className = 'array-container';
-        
-        // Create table wrapper with horizontal scrolling
-        const tableWrapper = document.createElement('div');
-        tableWrapper.className = 'array-table-wrapper';
-        tableWrapper.style.overflowX = 'auto'; // Add horizontal scrolling
-        container.appendChild(tableWrapper);
-        
-        // Create table
-        const table = document.createElement('table');
-        table.className = 'array-table';
-        
-        // Create header row
-        const thead = document.createElement('thead');
-        const headerRow = document.createElement('tr');
-        
-        // Add header cells for display properties
-        const displayProps = arrayConfig.DisplayProperties || [];
-        displayProps.sort((a, b) => (a.Order || 0) - (b.Order || 0));
-        
-        // Hide index column by default, only show if explicitly enabled
-        if (arrayConfig.ShowIndex === true) {
-            const indexTh = document.createElement('th');
-            indexTh.textContent = arrayConfig.IndexHeader || '#';
-            indexTh.className = 'array-index-column';
-            headerRow.appendChild(indexTh);
-        }
-        
-        // Add simple header cells for now - we'll add styling after getting property definitions
-        displayProps.forEach(propConfig => {
-            const th = document.createElement('th');
-            th.textContent = propConfig.Label || this.formatLabel(propConfig.PropertyPath);
-            headerRow.appendChild(th);
-        });
-        
-        thead.appendChild(headerRow);
-        table.appendChild(thead);
-        
-        // Create body
-        const tbody = document.createElement('tbody');
-        
-        // Get property definition for the array to determine element type
-        const arrayPropDef = this._getPropertyDefinition(model._className, arrayConfig.PropertyPath);
-        console.log(`Array property definition:`, arrayPropDef);
-        
-        // Get element type from array property definition
-        let elementClassName = null;
-        if (arrayPropDef && arrayPropDef.ElementType) {
-            elementClassName = arrayPropDef.ElementType;
-            console.log(`Found array element type: ${elementClassName}`);
-        }
-        
-        // Now that we have the arrayPropDef, apply column styling based on property types
-        // Count boolean properties vs. other properties for width distribution
-        const booleanProps = [];
-        const otherProps = [];
-        
-        // Find all th elements we created earlier
-        const headerCells = headerRow.querySelectorAll('th:not(.array-index-column)');
-        
-        // First pass: identify boolean columns by examining actual data
-        // This is more reliable than just checking property definitions
-        const columnTypes = new Array(displayProps.length).fill('unknown');
-        
-        // Check the actual data in the array to determine column types
-        if (array && array.length > 0) {
-            // Sample the first few items to determine column types
-            const sampleSize = Math.min(array.length, 5);
-            
-            for (let i = 0; i < sampleSize; i++) {
-                const item = array[i];
-                
-                displayProps.forEach((propConfig, index) => {
-                    const propPath = propConfig.PropertyPath;
-                    const value = ModelPathUtils.getValueFromObjectPath(item, propPath);
-                    
-                    // If we find a boolean value, mark this column as boolean
-                    if (typeof value === 'boolean') {
-                        columnTypes[index] = 'boolean';
-                    } 
-                    // Only override unknown types
-                    else if (columnTypes[index] === 'unknown') {
-                        columnTypes[index] = typeof value;
-                    }
-                });
-            }
-        }
-        
-        // Fall back to property definitions for columns we couldn't determine from data
-        headerCells.forEach((th, index) => {
-            const propConfig = displayProps[index];
-            if (!propConfig) return;
-            
-            // Skip columns we've already identified from data
-            if (columnTypes[index] !== 'unknown') {
-                if (columnTypes[index] === 'boolean') {
-                    booleanProps.push({ propConfig, th });
-                } else {
-                    otherProps.push({ propConfig, th });
-                }
-                return;
-            }
-            
-            // Fall back to property definition
-            let isBooleanType = false;
-            
-            // Check if we have type information in the property config
-            if (propConfig.Type === 'boolean') {
-                isBooleanType = true;
-            } else {
-                // Try to get property definition from array element type
-                const propName = propConfig.PropertyPath;
-                const propDef = this._getPropertyDefinition(
-                    arrayPropDef?.ElementType || (arrayPropDef?.Type === 'array' ? arrayPropDef.ElementType : null),
-                    propName
-                );
-                
-                if (propDef && propDef.Type === 'boolean') {
-                    isBooleanType = true;
-                }
-            }
-            
-            // Categorize the property
-            if (isBooleanType) {
-                booleanProps.push({ propConfig, th });
-            } else {
-                otherProps.push({ propConfig, th });
-            }
-        });
-        
-        // Apply column widths based on type
-        console.log('Boolean columns:', booleanProps.length, 'Other columns:', otherProps.length);
-        
-        // Apply fixed width to boolean columns
-        booleanProps.forEach(({ th }) => {
-            th.classList.add('boolean-column');
-        });
-        
-        // Set table layout to fixed to ensure column widths are respected
-        table.style.tableLayout = 'fixed';
-        
-        // For non-boolean columns, set width to auto to distribute remaining space
-        if (otherProps.length > 0) {
-            const percentWidth = 100 / (displayProps.length - booleanProps.length);
-            
-            otherProps.forEach(({ th }) => {
-                th.style.width = `${percentWidth}%`;
-            });
-        }
-        
-        // Add rows for each item
-        array.forEach((item, index) => {
-            const row = document.createElement('tr');
-            
-            // Hide index column by default, only show if explicitly enabled
-            if (arrayConfig.ShowIndex === true) {
-                const indexCell = document.createElement('td');
-                indexCell.textContent = (index + 1).toString();
-                indexCell.className = 'array-index-column';
-                row.appendChild(indexCell);
-            }
-            
-            // Add cells for display properties
-            displayProps.forEach(propConfig => {
-                const cell = document.createElement('td');
-                
-                // Get property name from path
-                const propName = propConfig.PropertyPath;
-                const value = item[propName];
-                
-                // Get property definition - use element type from array definition if available
-                let propDef = null;
-                
-                if (arrayPropDef && arrayPropDef.Type) {
-                    // Get the class name from ElementType
-                    const elementType = arrayPropDef.Type;
-                    console.log(`Looking up property ${propName} in class ${elementType}`);
-                    propDef = this._getPropertyDefinition(elementType, propName);
-                } else if (item && item._className) {
-                    // Fall back to item's class name if array definition doesn't have ElementType
-                    propDef = this._getPropertyDefinition(item._className, propName);
-                }
-                
-                console.log(`Property definition for ${propName}:`, propDef);
-                
-                // Create appropriate widget
-                const widget = this._createWidgetFromMetadata(propConfig, value, propDef);
-                
-                // Determine if field is editable - check property definition if not explicitly set
-                let isEditable = propConfig.Editable !== false;
-                
-                // If Editable is not explicitly set in config, check for ReadOnly in property info
-                if (propConfig.Editable === undefined && propDef && propDef.ReadOnly === true) {
-                    isEditable = false;
-                }
-                
-                // Handle non-editable fields differently based on type
-                if (!isEditable) {
-                    // For non-editable text inputs, replace with bold label
-                    if (widget.type === 'text' || widget.type === 'number') {
-                        // Create a label instead of an input
-                        const label = document.createElement('span');
-                        label.className = 'non-editable-label';
-                        label.textContent = value !== undefined && value !== null ? value.toString() : '';
-                        
-                        // Replace the widget with our label
-                        cell.appendChild(label);
-                        row.appendChild(cell);
-                        
-                        // Skip to next iteration by avoiding the code below
-                        return;
-                    } else {
-                        // For other types like checkboxes, just disable them
-                        widget.disabled = true;
-                        widget.className = 'form-control';
-                    }
-                } else {
-                    // Normal editable field
-                    widget.className = 'form-control';
-                }
-                
-                cell.appendChild(widget);
-                row.appendChild(cell);
-                
-                // Create binding for this widget if it's editable
-                if (isEditable) {
-                    const app = this._view.getApp();
-                    if (app) {
-                        const model = app.getModel();
-                        if (model) {
-                            // Create object path to this array item property
-                            const itemObjectPath = `${arrayConfig.PropertyPath}[${index}]`;
-                            
-                            // Determine the appropriate attribute based on widget type
-                            let attribute = 'value';
-                            if (widget.type === 'checkbox') {
-                                attribute = 'checked';
-                            }
-                            
-                            // Create binding for this widget with appropriate event handling
-                            let parser, formatter, viewEvent;
-                            
-                            if (widget.type === 'checkbox') {
-                                parser = val => Boolean(val);
-                                formatter = val => Boolean(val);
-                                viewEvent = 'change';
-                            } else if (widget.type === 'number' || typeof value === 'number') {
-                                parser = val => {
-                                    const num = parseFloat(val);
-                                    return isNaN(num) ? 0 : num;
-                                };
-                                formatter = val => val;
-                                viewEvent = 'change';
-                            } else {
-                                parser = val => val;
-                                formatter = val => val || '';
-                                viewEvent = 'change';
-                                
-                                // Add event listeners for Enter key and blur (input field loses focus)
-                                widget.addEventListener('keydown', function(e) {
-                                    if (e.key === 'Enter') {
-                                        this.blur(); // Remove focus when Enter is pressed
-                                    }
-                                });
-                            }
-                            
-                            // Create binding with objectPath and property separate
-                            app.bindingManager.createBinding({
-                                view: widget,
-                                viewAttribute: attribute,
-                                viewEvent: viewEvent,
-                                objectPath: itemObjectPath,
-                                property: propName,
-                                parser: parser,
-                                formatter: formatter
-                            });
-                        }
-                    }
-                }
-            });
-            
-            tbody.appendChild(row);
-        });
-        
-        table.appendChild(tbody);
-        tableWrapper.appendChild(table);
-        container.appendChild(tableWrapper);
-        
-        // Add container to the section container
-        sectionContainer.appendChild(container);
-        
-        // Add to DOM
-        this.formElement.appendChild(sectionContainer);
     }
     
     /**
@@ -997,257 +584,6 @@ export class ModelPanel extends BaseComponent {
             return null;
         }
     }
-    
-    /**
-     * Get the type of a value
-     * @param {*} value - The value to check
-     * @returns {string} The type of the value
-     */
-    getType(value) {
-        if (value === null) return 'null';
-        if (Array.isArray(value)) return 'array';
-        if (value instanceof Date) return 'date';
-        return typeof value;
-    }
-    
-    /**
-     * Get the default widget type based on property definition if available, otherwise fallback to value inference
-     * @param {*} value - The property value
-     * @param {Object} propConfig - The property configuration from view config 
-     * @param {Object} propDef - The property definition from model class definition
-     * @returns {string} The default widget type
-     * @private
-     */
-    _getDefaultWidgetType(value, propConfig = {}, propDef = null) {
-        // If we have a property definition with type information, prioritize that
-        if (propDef && propDef.Type) {
-            // Use the explicit type from model definition
-            const defType = propDef.Type.toLowerCase();
-            console.log(`Using property definition type: ${defType} for widget selection`);
-            
-            switch (defType) {
-                case 'boolean':
-                    return 'checkbox';
-                case 'number':
-                case 'integer':
-                case 'float':
-                case 'double':
-                    return 'number';
-                case 'array':
-                    return 'array';
-                case 'object':
-                    return 'object';
-                case 'string':
-                    // Check if this string property has ValidValues for dropdown
-                    if (propDef.ValidValues && Array.isArray(propDef.ValidValues) && propDef.ValidValues.length > 0) {
-                        console.log(`Found ValidValues for property: ${propDef.ValidValues.join(', ')}`);
-                        return 'select';
-                    }
-                    return 'text';
-                default:
-                    return 'text';
-            }
-        }
-        
-        // Fallback to property name inspection for boolean type hints
-        const propName = propConfig.PropertyPath ? 
-            propConfig.PropertyPath.split('.').pop().toLowerCase() : 
-            (value && typeof value === 'object' && value._id ? value._id.toLowerCase() : '');
-            
-        if (propName && (
-            propName.startsWith('is') || 
-            propName.startsWith('use') || 
-            propName.startsWith('flag') ||
-            propName.startsWith('enable') ||
-            propName.startsWith('has') ||
-            propName === 'active' ||
-            propName === 'required'
-        )) {
-            return 'checkbox';
-        }
-        
-        // Handle string 'true'/'false' values
-        if (typeof value === 'string' && 
-            (value.toLowerCase() === 'true' || value.toLowerCase() === 'false')) {
-            return 'checkbox';
-        }
-        
-        // Last resort: inference from actual value type
-        const type = this.getType(value);
-        
-        switch (type) {
-            case 'boolean':
-                return 'checkbox';
-            case 'number':
-                return 'number';
-            case 'array':
-                return 'array';
-            case 'object':
-                return 'object';
-            case 'null':
-                return 'text';
-            default:
-                return 'text';
-        }
-    }
-    
-    // Old _getDefaultWidgetType method removed - using the improved version above
-    
-    /**
-     * Format a label from a property key
-     * @param {string} key - The property key
-     * @returns {string} - The formatted label
-     */
-    formatLabel(key) {
-        // Handle null/undefined or non-string inputs
-        if (key === null || key === undefined) {
-            return '';
-        }
-        
-        // Convert to string in case it's a number or other type
-        const str = String(key);
-        
-        // Return empty string for empty input
-        if (!str) {
-            return '';
-        }
-        
-        try {
-            // Convert camelCase to Title Case with spaces
-            return str
-                // Insert a space before all uppercase letters
-                .replace(/([A-Z])/g, ' $1')
-                // Replace underscores with spaces
-                .replace(/_/g, ' ')
-                // Capitalize the first letter
-                .replace(/^./, s => s.toUpperCase())
-                // Trim any leading/trailing spaces
-                .trim()
-                // Replace multiple spaces with a single space
-                .replace(/\s+/g, ' ');
-        } catch (error) {
-            console.warn('Error formatting label:', error);
-            return str; // Return original string if formatting fails
-        }
-    }
-    
-    /**
-     * Create a form field for a primitive value
-     * @param {string} key - The property key
-     * @param {*} value - The property value
-     * @param {string} type - The value type
-     * @param {HTMLElement} container - The container to append the field to
-     * @param {string} [propertyPath=''] - The full property path in the model
-     */
-    createField(key, value, type, container, propertyPath = '') {
-        const formGroup = document.createElement('div');
-        formGroup.className = 'form-group';
-
-        // Create label
-        const label = document.createElement('label');
-        label.textContent = this.formatLabel(key);
-        const fieldId = `field-${key}-${Math.random().toString(36).substr(2, 9)}`;
-        label.htmlFor = fieldId;
-
-        // Create input based on type
-        let input;
-
-        switch (type) {
-            case 'boolean':
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.checked = value;
-                break;
-            case 'number':
-                input = document.createElement('input');
-                input.type = 'number';
-                input.value = value;
-                break;
-            case 'string':
-                if (value.length > 100) {
-                    input = document.createElement('textarea');
-                    input.rows = 3;
-                } else {
-                    input = document.createElement('input');
-                    input.type = 'text';
-                }
-                input.value = value;
-                break;
-            default:
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = String(value);
-                break;
-        }
-
-        // Set common attributes
-        input.id = fieldId;
-        input.name = key;
-        input.className = 'form-control';
-        // Make all fields editable
-        input.disabled = false;
-
-        // Handle value display
-        if (value === null || value === undefined) {
-            input.value = '';
-            input.placeholder = 'null';
-        } else if (type === 'boolean') {
-            input.checked = Boolean(value);
-        } else {
-            input.value = String(value);
-        }
-
-        // Assemble form group
-        formGroup.appendChild(label);
-        formGroup.appendChild(input);
-        
-        // Add to container
-        container.appendChild(formGroup);
-        
-        // Create binding for this field if we have a property path
-        if (propertyPath) {
-            // Get the app and model through the view
-            const app = this._view.getApp();
-            if (app) {
-                const model = app.getModel();
-                if (model) {
-                    
-                    // Extract objectPath and property from propertyPath for field
-                    const fieldPathParts = propertyPath.split('.');
-                    const fieldProperty = fieldPathParts.pop();
-                    const fieldObjectPath = fieldPathParts.length > 0 ? fieldPathParts.join('.') : '';
-                    
-                    // Create binding for this input
-                    // Add event listeners for Enter key and blur (input field loses focus)
-                    if (type !== 'boolean') {
-                        input.addEventListener('keydown', function(e) {
-                            if (e.key === 'Enter') {
-                                this.blur(); // Remove focus when Enter is pressed
-                            }
-                        });
-                    }
-                    
-                    this.createBinding({
-                        model: model,
-                        objectPath: fieldObjectPath,
-                        property: fieldProperty,
-                        view: input,
-                        viewAttribute: type === 'boolean' ? 'checked' : 'value',
-                        viewEvent: type === 'boolean' ? 'change' : 'change', // Use 'change' instead of 'input' to only update on field exit
-                        parser: type === 'number' ? val => parseFloat(val) : val => val
-                    });
-                }
-            }
-        }
-    }
-    
-    // createObjectField method removed - not used in the current implementation
-
-    // removed unused createArrayField method
-
-    // removed unused createArrayTable method
-
-    // removed unused createArrayList method
 
     /**
      * Format a property key as a label
