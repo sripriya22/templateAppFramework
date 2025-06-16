@@ -41,16 +41,6 @@
     -ms-overflow-style: -ms-autohiding-scrollbar; /* IE and Edge */
 }
 
-/* Non-editable field styling */
-.non-editable-field {
-    font-weight: bold;
-    padding: 6px 0;
-    display: inline-block;
-    border: none;
-    background: transparent;
-    color: #333;
-}
-
 /* Common section styles */
 fieldset {
     margin-bottom: 20px;
@@ -236,17 +226,6 @@ table.array-table th.boolean-column {
     width: 80px !important;
     max-width: 80px !important;
     min-width: 80px !important;
-}
-
-/* Style for non-editable cells */
-table.array-table td .non-editable-label {
-    font-weight: bold;
-    border: none;
-    background: transparent;
-    padding: 0;
-    width: 100%;
-    display: block;
-    color: #333;
 }
 
 table.array-table th {

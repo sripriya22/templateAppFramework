@@ -143,7 +143,7 @@ export class PropertyGroupSection extends ModelPanelSection {
             propertyPath: propPath,
             columns: propConfig.Columns || [],
             model: this._model,
-            title: propConfig.Label || this._modelPanel.getPropertyRenderUtils().formatLabel(propPath.split('.').pop()),
+            title: propConfig.Label,
             className: propConfig.ClassName || '',
             utils: this._modelPanel.getPropertyRenderUtils()
         });
