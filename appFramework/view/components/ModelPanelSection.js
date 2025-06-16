@@ -18,7 +18,6 @@ export class ModelPanelSection extends BaseComponent {
         this._modelPanel = modelPanel;
         this._sectionConfig = sectionConfig;
         this._model = model;
-        this.eventManager = this._view?.getApp()?.eventManager;
         
         // Initialize the component element by calling the createSection method
         this.element = this._createSection();
@@ -492,11 +491,6 @@ export class ModelPanelSection extends BaseComponent {
      */
     _updateDependentBindings() {
         console.log('Forcing update on section DependentBindings');
-        
-        if (!this.eventManager) {
-            console.warn('No event manager available in section to update dependent bindings');
-            return;
-        }
         
         // Get the model
         const model = this._model;

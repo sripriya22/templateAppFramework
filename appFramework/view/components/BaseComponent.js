@@ -11,6 +11,7 @@ export class BaseComponent {
         this._view = view;
         this._config = config;
         this._bindings = [];
+        this._childComponents = [];
         this.element = null;
     }
 

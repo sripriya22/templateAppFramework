@@ -1,8 +1,8 @@
 import { BaseComponent } from './BaseComponent.js';
 import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
 import { PropertyGroupSection } from './PropertyGroupSection.js';
-import { ArrayPropertySection } from './ArrayPropertySection.js';
 import { DependentBinding } from '../../binding/DependentBinding.js';
+import { PropertyRenderUtils } from '../utils/PropertyRenderUtils.js';
 
 // CSS is now loaded in the main HTML file
 // This prevents duplicate loading and path resolution issues
@@ -21,6 +21,10 @@ export class ModelPanel extends BaseComponent {
         super(view);
         this._config = config; // Store view configuration
         this._configLoaded = false; // Flag to track if config has been loaded
+        
+        // Create a shared PropertyRenderUtils instance for all sections
+        this._propertyRenderUtils = new PropertyRenderUtils(view);
+        
         this.createModelPanel();
         
         // Store component reference on element for layout access
@@ -154,8 +158,8 @@ export class ModelPanel extends BaseComponent {
         
         // Process each section in the configuration
         for (const section of this._config.Sections) {
-            if (!section.Type) {
-                console.warn('Section missing Type property, skipping');
+            if (!section || !section.Type) {
+                console.warn('Invalid section configuration, missing Type property');
                 continue;
             }
             
@@ -211,62 +215,32 @@ export class ModelPanel extends BaseComponent {
      * @param {Object} section - The section configuration
      * @param {Object} model - The model data
      * @private
+     * @returns {Object} The created section component
      */
     _createSection(section, model) {
-        console.log('ModelPanel._createSection called with section type:', section.Type, 'for path:', section.PropertyPath || section.GroupName);
-        console.log('Full section config:', JSON.stringify(section));
-        console.log('Model object type:', model ? model._className : 'null');
-        
-        switch (section.Type) {
-            case 'PropertyGroup':
-                // Create and return a PropertyGroupSection
-                console.log('Creating PropertyGroupSection', section);
-                return new PropertyGroupSection(this, section, model);
-                
-            case 'ArrayProperty':
-                // Create and return an ArrayPropertySection
-                console.log('Creating ArrayPropertySection for path:', section.PropertyPath);
-                const arraySection = new ArrayPropertySection(this, section, model);
-                console.log('ArrayPropertySection created:', arraySection ? 'success' : 'failed');
-                return arraySection;
-                
-            default:
-                // Unknown section type
-                console.warn(`Unknown section type: ${section.Type}`);
-                return null;
-        }
-    }
-    
-    /**
-     * Parse a dependency expression from the config
-     * @param {string|boolean} expression - The expression (e.g. "${Use}" or true/false)
-     * @param {string} objectPath - The current object path for context
-     * @returns {Object|null} Parsed dependency or null if not a dependency
-     * @private
-     */
-    _parseDependencyExpression(expression, objectPath) {
-        console.log('Parsing expression:', expression, 'for path:', objectPath);
-        
-        // Handle boolean values directly
-        if (typeof expression === 'boolean') {
-            console.log('Expression is a boolean, not a dependency');
-            return null; // Not a dependency, just a static value
+        if (!section || !section.Type) {
+            console.error('Invalid section configuration:', section);
+            return null;
         }
         
-        // Check for dependency expression format: ${PropName}
-        if (typeof expression === 'string' && expression.startsWith('${') && expression.endsWith('}')) {
-            // Extract property name between ${ and }
-            const propertyName = expression.substring(2, expression.length - 1).trim();
-            console.log('Found property reference:', propertyName);
-            
-            // Return the dependency config
-            return {
-                property: propertyName,
-                objectPath: objectPath
-            };
+        // Create the appropriate section type
+        let sectionComponent = null;
+        
+        // Only handle PropertyGroup sections - no backward compatibility
+        if (section.Type === 'PropertyGroup') {
+            console.log('Creating PropertyGroupSection for:', section.GroupName);
+            sectionComponent = new PropertyGroupSection(this, section, model);
+        } else {
+            console.error('Unknown section type:', section.Type);
+            return null;
         }
         
-        console.log('Not a dependency expression');
+        // Add the section to the form
+        if (sectionComponent && sectionComponent.element) {
+            this.formElement.appendChild(sectionComponent.element);
+            return sectionComponent;
+        }
+        
         return null;
     }
     
@@ -636,5 +610,13 @@ export class ModelPanel extends BaseComponent {
         if (Array.isArray(value)) return 'array';
         if (value instanceof Date) return 'date';
         return typeof value;
+    }
+    
+    /**
+     * Get the shared PropertyRenderUtils instance
+     * @returns {PropertyRenderUtils} The PropertyRenderUtils instance
+     */
+    getPropertyRenderUtils() {
+        return this._propertyRenderUtils;
     }
 }

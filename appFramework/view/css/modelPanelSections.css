@@ -1,0 +1,109 @@
+/* CSS for ModelPanelSection components */
+
+/* General section styles */
+.model-panel {
+    padding-top: 15px;
+}
+
+.property-group {
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    margin-bottom: 15px;
+    background-color: #f9f9f9;
+}
+
+.property-group legend {
+    padding: 0 10px;
+    font-weight: bold;
+    font-size: 16px;
+    color: #333;
+}
+
+.form-group {
+    margin-bottom: 10px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+}
+
+/* Array property styles */
+.array-property-field {
+    margin-bottom: 15px;
+}
+
+.array-section {
+    border: none;
+    padding: 0;
+    margin-bottom: 15px;
+}
+
+.array-section legend {
+    padding: 0 10px;
+    font-weight: bold;
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+/* Array table styles */
+.array-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1px solid #ddd;
+    box-shadow: 0 2px 3px rgba(0,0,0,0.1);
+}
+
+.array-table th {
+    background-color: #f2f2f2;
+    padding: 8px;
+    text-align: left;
+    font-weight: bold;
+    border-bottom: 2px solid #ddd;
+}
+
+.array-table td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.array-table tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.array-table tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Input styles */
+input, select, textarea {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+input[type="checkbox"] {
+    width: auto;
+}
+
+/* Non-editable field styles */
+.non-editable-field {
+    background-color: #f5f5f5;
+    color: #777;
+    cursor: not-allowed;
+}
+
+/* Visibility toggle */
+[data-visible="false"] {
+    display: none;
+}
+
+/* Ensure first section has adequate spacing */
+.model-form > *:first-child {
+    margin-top: 15px;
+}
