@@ -63,7 +63,8 @@ export class ModelPanel extends BaseComponent {
         // Create header
         const header = document.createElement('div');
         header.className = 'panel-header';
-        header.textContent = 'Editor';
+        header.textContent = 'Editor'; // Default text, will be updated when model is set
+        this.headerElement = header; // Store reference to header for updates
 
         // Create form container
         this.formElement = document.createElement('div');
@@ -94,6 +95,19 @@ export class ModelPanel extends BaseComponent {
         if (!model) {
             console.warn('ModelPanel.updateModel called with null model');
             return;
+        }
+        
+        // Update header with class name
+        if (this.headerElement) {
+            // Try to get class name from model or config
+            const className = model._className || 
+                (this._config && this._config.RootClass) || 
+                model.constructor.name ||
+                'Editor';
+            
+            // Format the class name for display (remove any package prefix)
+            const displayName = className.split('.').pop();
+            this.headerElement.textContent = displayName;
         }
         
         // If we have a configuration and it's loaded, use it

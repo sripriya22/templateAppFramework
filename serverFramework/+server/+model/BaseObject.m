@@ -244,7 +244,7 @@ classdef (Abstract) BaseObject < handle
                             return;
                         elseif isstruct(propValue) && isscalar(propValue)
                             % Single object
-                            obj.(propName) = feval(targetClass, obj.RootModel, propValue);
+                            obj.(propName) = feval(targetClass.Name, obj.RootModel, propValue);
                             return;
                         end
                     end

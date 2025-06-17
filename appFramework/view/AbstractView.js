@@ -95,7 +95,7 @@ export class View extends EventListener {
      * @param {Object} event - The event object
      */
     handle_server_error(event) {
-        this.log(`Server error: ${event.Message}`, 'error', event.data.Error);
+        this.log(`Server error: ${event.Message}`, 'error', event.ID);
     }
     
     /**
