@@ -322,4 +322,25 @@ table.array-table th {
         color: #333;
         border-color: #ddd;
     }
+
+    /* Non-editable field styles - These rules override the :read-only styling in components.css */
+    .non-editable-field,
+    input.non-editable-field,
+    select.non-editable-field,
+    textarea.non-editable-field,
+    .form-group input[type="text"].non-editable-field,
+    .form-group input[type="number"].non-editable-field,
+    .form-group input[type="date"].non-editable-field,
+    .form-group textarea.non-editable-field {
+        background-color: transparent !important;
+        border: none !important;
+        color: #333 !important;
+        font-weight: bold !important;
+        cursor: default !important;
+        box-shadow: none !important;
+        padding: 8px 0 !important;
+        outline: none !important;
+        appearance: none !important;
+        -webkit-appearance: none !important;
+    }
 }

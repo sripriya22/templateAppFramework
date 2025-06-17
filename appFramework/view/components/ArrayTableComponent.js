@@ -140,12 +140,15 @@ export class ArrayTableComponent extends BaseComponent {
         // Get model class name for property definitions
         const arrayPropDef = this._getArrayPropertyDefinition();
         
+        // Initialize propDef variable to store property definition
+        let propDef = null;
+        
         // If we have a property definition, we can get the item class name
         if (arrayPropDef && arrayPropDef.Type) {
             const itemClassName = arrayPropDef.Type;
             
             // Get property definition for this specific cell
-            const propDef = this._utils.getPropertyDefinition(itemClassName, column.Key);
+            propDef = this._utils.getPropertyDefinition(itemClassName, column.Key);
             
             if (propDef) {
                 // Use the property definition type if available
@@ -161,8 +164,8 @@ export class ArrayTableComponent extends BaseComponent {
             propType = this._utils.getPropertyType(propertyValue, null);
         }
         
-        // Create the input element
-        const input = this._utils.createPropertyInput(propType, propertyValue, { isEditable });
+        // Create the input element, passing propDef for combobox support
+        const input = this._utils.createPropertyInput(propType, propertyValue, { isEditable, propDef });
         
         // Create binding path for this cell
         const cellPath = `${this._propertyPath}[${rowIndex}].${column.Key}`;

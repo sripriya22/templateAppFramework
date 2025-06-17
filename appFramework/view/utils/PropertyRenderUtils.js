@@ -120,39 +120,68 @@ export class PropertyRenderUtils {
      * @param {*} propValue - The property value
      * @param {Object} options - Additional options
      * @param {boolean} [options.isEditable=true] - Whether the input should be editable
+     * @param {Object} [options.propDef] - Property definition (if available)
      * @returns {HTMLElement} The created input element
      */
-    createPropertyInput(propType, propValue, { isEditable = true } = {}) {
+    createPropertyInput(propType, propValue, { isEditable = true, propDef = null } = {}) {
         let input;
         
-        switch (propType.toLowerCase()) {
-            case 'boolean':
-                input = document.createElement('input');
-                input.type = 'checkbox';
-                input.checked = Boolean(propValue);
-                break;
-                
-            case 'int':
-            case 'double':
-                input = document.createElement('input');
-                input.type = 'number';
-                input.step = propType === 'int' ? '1' : 'any';
-                input.value = propValue !== null && propValue !== undefined ? propValue : '';
-                break;
-                
-            case 'string':
-            default:
-                input = document.createElement('input');
-                input.type = 'text';
-                input.value = propValue !== null && propValue !== undefined ? propValue : '';
-                break;
+        // Check if property has ValidValues - create a select/combobox
+        if (propDef && Array.isArray(propDef.ValidValues) && propDef.ValidValues.length > 0) {
+            // Create a select element for the combobox
+            input = document.createElement('select');
+            
+            // Add options based on ValidValues
+            propDef.ValidValues.forEach(value => {
+                const option = document.createElement('option');
+                option.value = value;
+                option.textContent = value;
+                input.appendChild(option);
+            });
+            
+            // Set the current value if it exists
+            if (propValue !== null && propValue !== undefined) {
+                input.value = propValue;
+            }
+        } else {
+            // No ValidValues, create standard input based on type
+            switch (propType.toLowerCase()) {
+                case 'boolean':
+                    input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.checked = Boolean(propValue);
+                    break;
+                    
+                case 'int':
+                case 'double':
+                    input = document.createElement('input');
+                    input.type = 'number';
+                    input.step = propType === 'int' ? '1' : 'any';
+                    input.value = propValue !== null && propValue !== undefined ? propValue : '';
+                    break;
+                    
+                case 'string':
+                default:
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.value = propValue !== null && propValue !== undefined ? propValue : '';
+                    break;
+            }
         }
         
-        // Set common attributes
-        input.disabled = !isEditable;
-        
-        // Set appropriate class based on editability
+        // Set editability based on input type
         if (!isEditable) {
+            // Use appropriate attribute based on input type
+            if (input.tagName.toLowerCase() === 'select' || 
+                (input.tagName.toLowerCase() === 'input' && input.type === 'checkbox')) {
+                // For select elements and checkboxes, use disabled
+                input.disabled = true;
+            } else {
+                // For text and number inputs, use readOnly
+                input.readOnly = true;
+            }
+            
+            // Apply non-editable styling class to all non-editable fields
             input.className = 'non-editable-field';
         }
         
