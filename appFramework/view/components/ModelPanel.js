@@ -63,7 +63,7 @@ export class ModelPanel extends BaseComponent {
         // Create header
         const header = document.createElement('div');
         header.className = 'panel-header';
-        header.textContent = 'Editor'; // Default text, will be updated when model is set
+        header.textContent = this._view.getApp().getRootClassName()// Default text, will be updated when model is set
         this.headerElement = header; // Store reference to header for updates
 
         // Create form container
@@ -100,10 +100,7 @@ export class ModelPanel extends BaseComponent {
         // Update header with class name
         if (this.headerElement) {
             // Try to get class name from model or config
-            const className = model._className || 
-                (this._config && this._config.RootClass) || 
-                model.constructor.name ||
-                'Editor';
+            const className = this._view.getApp().getRootClassName();
             
             // Format the class name for display (remove any package prefix)
             const displayName = className.split('.').pop();

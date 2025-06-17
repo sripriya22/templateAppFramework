@@ -176,7 +176,8 @@ classdef (Abstract) BaseObject < handle
             
             % Handle empty values
             if isempty(propValue)
-                obj.(propName) = propValue;
+                % TODO: implement something more robust that differentiates
+                % between missing and empty values
                 return;
             end
             

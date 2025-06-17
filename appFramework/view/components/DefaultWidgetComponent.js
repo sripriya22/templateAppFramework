@@ -102,11 +102,16 @@ export class DefaultWidgetComponent extends BaseComponent {
         const property = pathParts.pop();
         const objectPath = pathParts.join('.');
         
+        // Determine the appropriate viewAttribute and viewEvent based on input type
+        const isCheckbox = input.type === 'checkbox';
+        
         this._utils.createBinding({
             model: this._model,
             objectPath: objectPath,
             property: property,
             view: input,
+            viewAttribute: isCheckbox ? 'checked' : 'value',
+            viewEvent: isCheckbox ? 'change' : 'input',
             parser: propType === 'number' ? val => parseFloat(val) : val => val
         }, this);
         
