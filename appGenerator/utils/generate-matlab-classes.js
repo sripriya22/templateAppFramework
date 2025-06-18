@@ -264,8 +264,20 @@ function generatePropertyDefinition(propName, prop, appName) {
     if (typeof defaultValue === 'string') {
       defaultValue = `"${defaultValue}"`;
     } else if (Array.isArray(defaultValue) && defaultValue.length === 0) {
-      if (prop.Type && prop.Type.includes('.')) {
-        defaultValue = `${prop.Type}.empty`;
+      // Handle empty arrays for object types
+      if (prop.Type) {
+        if (prop.Type.includes('.')) {
+          // Already qualified type
+          defaultValue = `${prop.Type}.empty`;
+        } else if (!prop.IsPrimitive && 
+                  !['cell', 'struct', 'table', 'char', 'string', 'double', 'single', 
+                    'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'logical'].includes(prop.Type)) {
+          // Custom object class that needs qualification
+          defaultValue = `${appName}.${prop.Type}.empty`;
+        } else {
+          // Primitive type or builtin
+          defaultValue = '[]';
+        }
       } else {
         defaultValue = '[]';
       }
@@ -283,7 +295,13 @@ function generatePropertyDefinition(propName, prop, appName) {
   } else if (prop.Type === 'logical') {
     propDef += ` = false`;
   } else if (prop.Type && prop.Type.includes('.')) {
+    // Already qualified type
     propDef += ` = ${prop.Type}.empty`;
+  } else if (prop.Type && !prop.IsPrimitive && 
+            !['cell', 'struct', 'table', 'char', 'string', 'double', 'single', 
+              'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'logical'].includes(prop.Type)) {
+    // Custom object class that needs qualification
+    propDef += ` = ${appName}.${prop.Type}.empty`;
   }
   
   propDef += '\n\n';  // Add extra newline after each parameter definition
