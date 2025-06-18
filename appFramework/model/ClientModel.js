@@ -255,10 +255,17 @@ export class ClientModel extends EventListener {
       
       // Process each property based on its type
       for (const [key, value] of Object.entries(data)) {
+        const propDef = propertyDefs[key];
+        
+        // Handle array properties - ensure they're always arrays, even with single values
+        if (propDef && propDef.IsArray === true && value !== null && value !== undefined) {
+          // Convert non-array values to arrays
+          this[key] = Array.isArray(value) ? value : [value];
+        }
         // Special handling for boolean values to ensure proper type
-        if (typeof value === 'boolean' || 
+        else if (typeof value === 'boolean' || 
             value === 'true' || value === 'false' || 
-            propertyDefs[key]?.Type === 'Boolean') {
+            propDef?.Type === 'Boolean') {
           this[key] = typeof value === 'string' 
             ? value.toLowerCase() === 'true'
             : Boolean(value);
@@ -266,7 +273,7 @@ export class ClientModel extends EventListener {
           this[key] = value;
         } else if (typeof value === 'object') {
           this[key] = value;
-        } else if (!isNaN(Number(value)) && propertyDefs[key]?.Type === 'Number') {
+        } else if (!isNaN(Number(value)) && propDef?.Type === 'Number') {
           this[key] = Number(value);
         } else {
           this[key] = value;
