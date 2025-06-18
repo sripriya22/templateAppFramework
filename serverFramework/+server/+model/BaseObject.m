@@ -289,6 +289,11 @@ classdef (Abstract) BaseObject < handle
             %
             %   Returns:
             %       struct: Data-only representation of the object
+
+            if isempty(obj)
+                data = struct.empty;
+                return
+            end
             
             % Get all public properties
             props = properties(obj);

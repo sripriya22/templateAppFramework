@@ -215,7 +215,7 @@ classdef RootModel < server.model.BaseObject
             % Parameters:
             %   uid: The UID of the object to unregister
             
-            if obj.UidMap.isKey(uid)
+            if isvalid(obj) && obj.UidMap.isKey(uid)
                 try
                     obj.UidMap.remove(uid);
                 catch
