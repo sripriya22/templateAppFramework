@@ -247,47 +247,107 @@ export class ClientModel extends EventListener {
   }
   
   /**
-   * Creates a synthetic model class from a JSON definition
+   * Creates a synthetic class for a model type that doesn't have a formal class definition
    * @param {string} className - The name of the class to create
-   * @param {Object} classDefinition - The class definition from JSON
-   * @returns {Function} A synthetic model class constructor
-   * @private
+   * @param {Object} classDefinition - The class definition object
+   * @returns {Function} - Constructor function for the synthetic class
    */
-  _createSyntheticModelClass(className, classDefinition = {}) {
+  _createSyntheticModelClass(className, classDefinition) {
     // Extract property definitions to understand types
     const propertyDefs = classDefinition?.Properties || {};
+    
+    // Store reference to the ClientModel instance for use in the constructor
+    const clientModel = this;
     
     // Create a simple class constructor that accepts properties via object
     const SyntheticModelClass = function(data = {}) {
       // Set the _className property first - critical for view components
       this._className = className;
       
-      // Process each property based on its type
-      for (const [key, value] of Object.entries(data)) {
-        const propDef = propertyDefs[key];
+      // Loop through all properties in the definition
+      Object.entries(propertyDefs).forEach(([key, propDef]) => {
+        // Get the value from data if present, or use default
+        let value = data.hasOwnProperty(key) ? data[key] : propDef.Default;
         
         // Handle array properties - ensure they're always arrays, even with single values
         if (propDef && propDef.IsArray === true && value !== null && value !== undefined) {
           // Convert non-array values to arrays
-          this[key] = Array.isArray(value) ? value : [value];
+          const arrayValue = Array.isArray(value) ? value : [value];
+          
+          // For arrays of complex types (non-primitive objects), we need to instantiate each item
+          if (propDef.Type && !propDef.IsPrimitive) {
+            // Create a properly typed array by instantiating each element with the correct class
+            this[key] = arrayValue.map(item => {
+              if (item === null || item === undefined) {
+                return item;
+              }
+              
+              try {
+                // Check if we have a model class for this type
+                if (clientModel._modelClasses[propDef.Type]) {
+                  return new clientModel._modelClasses[propDef.Type](item);
+                } 
+                // If not, check if we have a definition for the type
+                else if (clientModel._modelDefinitions[propDef.Type]) {
+                  // Create a synthetic class for this type if needed
+                  const ElementClass = clientModel._createSyntheticModelClass(
+                    propDef.Type, 
+                    clientModel._modelDefinitions[propDef.Type]
+                  );
+                  return new ElementClass(item);
+                }
+                return item; // Keep as is if we can't instantiate it
+              } catch (error) {
+                console.warn(`Failed to create instance of array element type ${propDef.Type}:`, error);
+                return item;
+              }
+            });
+          } else {
+            // For primitive types, just assign the array directly
+            this[key] = arrayValue;
+          }
         }
         // Special handling for boolean values to ensure proper type
         else if (typeof value === 'boolean' || 
-            value === 'true' || value === 'false' || 
-            propDef?.Type === 'Boolean') {
-          this[key] = typeof value === 'string' 
-            ? value.toLowerCase() === 'true'
+                (propDef?.Type === 'Boolean' && (value === 'true' || value === 'false' || value === true || value === false))) {
+          this[key] = typeof value === 'boolean'
+            ? value
             : Boolean(value);
         } else if (value === null || value === undefined) {
           this[key] = value;
+        } else if (typeof value === 'object' && propDef?.Type) {
+          // Handle complex object types
+          try {
+            // Check if we have a registered class for this type
+            if (clientModel._modelClasses[propDef.Type]) {
+              this[key] = new clientModel._modelClasses[propDef.Type](value);
+            } 
+            // If not, check if we have a definition and create a synthetic class
+            else if (clientModel._modelDefinitions[propDef.Type]) {
+              const ElementClass = clientModel._createSyntheticModelClass(
+                propDef.Type, 
+                clientModel._modelDefinitions[propDef.Type]
+              );
+              this[key] = new ElementClass(value);
+            } else {
+              // No definition or class, just use raw value
+              this[key] = value;
+            }
+          } catch (error) {
+            console.warn(`Failed to create object instance of ${propDef.Type}:`, error.message);
+            this[key] = value;
+          }
         } else if (typeof value === 'object') {
+          // Object without Type specification
           this[key] = value;
         } else if (!isNaN(Number(value)) && propDef?.Type === 'Number') {
           this[key] = Number(value);
+        } else if (propDef?.Type === 'String' || typeof value === 'string') {
+          this[key] = String(value);
         } else {
           this[key] = value;
         }
-      }
+      });
       
       // Ensure the instance has an ID
       if (!this.id && !this.ID) {
@@ -1395,41 +1455,96 @@ sendPropertyChangeToServer(path, value) {
   }
   
   /**
-   * Validate a property change before applying it
-   * @param {Object} rootInstance - The root model instance
-   * @param {string} path - The full path to the property being changed
-   * @param {any} newValue - The proposed new value
-   * @returns {Object} Validation result with errors array
+   * Validate a property change
+   * @param {Object} rootInstance - The root instance of the model
+   * @param {string} path - The path to the property
+   * @param {*} value - The new value
+   * @returns {Object} Validation result
    * @private
    */
-  _validatePropertyChange(rootInstance, path, newValue) {
+  _validatePropertyChange(rootInstance, path, value) {
     const result = { errors: [] };
     
     try {
-      // Parse the path to extract the last object and property
+      // Parse the path to extract the object and property
       const pathInfo = ModelPathUtils.parseObjectPath(path);
       const propertyName = pathInfo.segments[pathInfo.segments.length - 1];
       
-      // Get the object that contains this property
-      const parentPath = pathInfo.segments.length > 1 ? 
-        ModelPathUtils.createObjectPath(
-          pathInfo.segments.slice(0, -1), 
-          pathInfo.indices.slice(0, pathInfo.indices.length - (pathInfo.segments.length > 1 ? 1 : 0))
-        ) : '';
+      // Determine the parent path and get the parent object
+      const parentPath = pathInfo.segments.length > 1
+        ? ModelPathUtils.createObjectPath(pathInfo.segments.slice(0, -1), pathInfo.indices)
+        : '';
       
-      const parentObject = parentPath ? 
-        ModelPathUtils.getValueFromObjectPath(rootInstance, parentPath) : 
-        rootInstance;
+      const parentObject = parentPath
+        ? ModelPathUtils.getValueFromObjectPath(rootInstance, parentPath)
+        : rootInstance;
         
       if (!parentObject) {
-        console.error(`Cannot find parent object at path ${parentPath}`);
+        console.error(`Unable to find parent object at path: ${parentPath}`);
         return result;
       }
       
-      // Get the class name of the parent object
-      const className = parentObject.constructor?.className || 
-                       parentObject.constructor?.name ||
-                       'UnknownClass';
+      // Determine the class name for validation
+      let className;
+      
+      // First, check if the parent object is an element of an array
+      // Look at all segments except the last one (which is the property we're validating)
+      // If the immediate parent is in an array, we need to get its type from the array property definition
+      if (parentObject && parentObject._className) {
+        // For direct properties (not in an array), use parent's class directly
+        className = parentObject._className;
+        
+        // Check if we're dealing with a property of an object inside an array
+        // by examining the path segments and indices
+        const isInArray = pathInfo.indices && 
+                          pathInfo.indices.length > 1 && 
+                          pathInfo.indices.some(idx => idx !== null);
+                          
+        if (isInArray && pathInfo.segments.length >= 3) {  
+          // If this property belongs to an object in an array, we need to find the 
+          // array's Type from its parent's class definition
+          
+          // For a path like 'species[0].parameters[1].value', the array property 'parameters'
+          // is the second-to-last segment in the path (penultimate segment)
+          const penultimateIndex = pathInfo.segments.length - 2;
+          const arrayPropertyName = pathInfo.segments[penultimateIndex];
+          
+          // Get the grandparent object that contains the array
+          // This would be 'species[0]' in our example
+          const grandparentPath = pathInfo.segments.length > 2 ?
+              ModelPathUtils.createObjectPath(
+                  pathInfo.segments.slice(0, penultimateIndex),
+                  pathInfo.indices.slice(0, penultimateIndex)
+              ) : '';
+              
+          const grandparent = grandparentPath ?
+              ModelPathUtils.getValueFromObjectPath(rootInstance, grandparentPath) :
+              rootInstance;
+              
+          if (grandparent && grandparent._className) {
+              // The object containing the array has a class name
+              const grandparentClass = grandparent._className;
+              
+              console.log(`Looking up array element type from ${grandparentClass}.${arrayPropertyName}`);
+              
+              // Get the array property definition from the grandparent's class
+              const propInfo = this._modelManager.getPropertyInfo(grandparentClass, arrayPropertyName);
+              
+              if (propInfo && propInfo.Type) {
+                  // Use the Type field from the property info
+                  className = propInfo.Type;
+                  console.log(`Found array element class: ${className}`);
+              }
+          }
+        }
+      }
+      
+      if (!className) {
+        console.error(`Unable to determine class for validation at path: ${path}`);
+        return result;
+      }
+      
+      console.log(`Using class '${className}' for validating property '${propertyName}'`);
       
       // Get all constraints that could be affected by this property change
       const constraints = this._validationManager.getConstraintsForProperty(className, propertyName);
@@ -1441,13 +1556,13 @@ sendPropertyChangeToServer(path, value) {
       
       // Create a temporary object with the proposed change to validate constraints
       const tempObject = {...parentObject};
-      tempObject[propertyName] = newValue;
+      tempObject[propertyName] = value;
       
       // Check each constraint
       for (const item of constraints) {
         if (item.type === 'property') {
           // Property-level validation
-          const error = this._validationManager.validatePropertyValue(newValue, item.validation);
+          const error = this._validationManager.validatePropertyValue(value, item.validation);
           if (error) {
             result.errors.push(error);
           }
