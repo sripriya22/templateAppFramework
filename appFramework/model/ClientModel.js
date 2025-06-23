@@ -3,6 +3,7 @@ import { ModelClassDefinitionManager } from './ModelClassDefinitionManager.js';
 import { EventListener } from '../controller/EventListener.js';
 import { EventTypes } from '../controller/EventTypes.js';
 import { ModelPathUtils } from '../utils/ModelPathUtils.js';
+import ValidationManager from '../utils/ValidationManager.js';
 
 /**
  * Client-side model that manages application data and state
@@ -73,6 +74,9 @@ export class ClientModel extends EventListener {
     
     /** @private */
     this._pendingChanges = new Map();
+    
+    /** @private */
+    this._validationManager = new ValidationManager(app);
   }
   
   /**
@@ -155,6 +159,11 @@ export class ClientModel extends EventListener {
       
       if (definitionNames.length === 0) {
         throw new Error('No model definitions provided');
+      }
+      
+      // Load model definitions into ValidationManager for validation
+      for (const [className, definition] of Object.entries(this._modelDefinitions)) {
+        this._validationManager.loadModelDefinition(definition);
       }
       
       // Initialize synthetic classes if real ones aren't provided
@@ -467,34 +476,35 @@ export class ClientModel extends EventListener {
   /**
    * Handle view-to-model property changes
    * @param {Object} eventData - The event data containing the property change
-   * @param {string} eventData.path - The full path to the property (backward compatibility)
-   * @param {string} eventData.objectPath - The path to the object containing the property
-   * @param {string} eventData.property - The name of the property that changed
-   * @param {any} eventData.value - The new value of the property
-   * @param {any} eventData.oldValue - The previous value of the property (optional)
-   * @param {string} eventData.source - The source of the change (optional)
+   * @param {string} eventData.Path - The full path to the property
+   * @param {string} eventData.ObjectPath - The path to the object containing the property
+   * @param {string} eventData.Property - The name of the property that changed
+   * @param {any} eventData.Value - The new value of the property
+   * @param {any} eventData.OldValue - The previous value of the property (optional)
+   * @param {string} eventData.Source - The source of the change (optional)
+   * @param {string} eventData.SourceView - The source view of the change (optional)
    */
   handle_view_to_model_property_changed(eventData) {
     try {
-      // Extract data using lowercase field names from binding framework
-      const { path, objectPath, property, value, oldValue, source } = eventData;
+      // Extract data using PascalCase field names from event schema
+      const { Path, ObjectPath, Property, Value, OldValue, Source, SourceView } = eventData;
       
-      if (!path || !property) {
+      if (!Path || !Property) {
         console.error('Invalid property change event - missing required fields:', eventData);
         return;
       }
       
-      // Use the path from the event - either as provided or reconstructed from objectPath and property
+      // Use the path from the event - either as provided or reconstructed from ObjectPath and Property
       // This ensures backward compatibility with code that might still use path only
-      let standardizedPath = path;
+      let standardizedPath = Path;
       
-      // If we have both objectPath and property, prefer using those to construct the path
-      if (objectPath !== undefined && property !== undefined) {
+      // If we have both ObjectPath and Property, prefer using those to construct the path
+      if (ObjectPath !== undefined && Property !== undefined) {
         try {
-          // Construct the full path from objectPath and property
-          standardizedPath = objectPath ? `${objectPath}.${property}` : property;
+          // Construct the full path from ObjectPath and Property
+          standardizedPath = ObjectPath ? `${ObjectPath}.${Property}` : Property;
         } catch (err) {
-          console.error(`Failed to construct path from objectPath and property:`, err);
+          console.error(`Failed to construct path from ObjectPath and Property:`, err);
           return;
         }
       }
@@ -516,28 +526,50 @@ export class ClientModel extends EventListener {
         return;
       }
       
+      // Perform validation before updating the property
+      const validationResult = this._validatePropertyChange(rootInstance, standardizedFullPath, Value);
+      if (validationResult.errors.length > 0) {
+        console.warn(`Validation failed for ${standardizedFullPath}:`, validationResult.errors);
+        
+        // Dispatch PROPERTY_CHANGE_REJECTED event
+        if (this._app?.eventManager) {
+          // Get the actual current value from the model
+          const currentModelValue = ModelPathUtils.getValueFromObjectPath(rootInstance, standardizedFullPath);
+          
+          this._app.eventManager.dispatchEvent(EventTypes.PROPERTY_CHANGE_REJECTED, {
+            PropertyPath: standardizedFullPath,
+            RejectedValue: Value,
+            ValidationErrors: validationResult.errors,
+            CurrentValue: currentModelValue, // Use actual current value from model, not OldValue from event
+            Source: Source || 'validation',
+            SourceView: SourceView // Propagate the source view from the original event
+          });
+        }
+        return;
+      }
+      
       // Update the property in the model using standardized utility
-      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, standardizedFullPath, value);
+      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, standardizedFullPath, Value);
       
       if (success) {
-        console.debug(`Updated property at path ${standardizedFullPath} to:`, value);
+        console.debug(`Updated property at path ${standardizedFullPath} to:`, Value);
         
         // Track this change as pending until confirmed by server
-        this.trackPendingChange(standardizedFullPath, value, oldValue);
+        this.trackPendingChange(standardizedFullPath, Value, OldValue);
         
         // Send the change to the server
-        this.sendPropertyChangeToServer(standardizedFullPath, value);
+        this.sendPropertyChangeToServer(standardizedFullPath, Value);
         
         // Dispatch MODEL_TO_VIEW_PROPERTY_CHANGED to update all views
         if (this._app?.eventManager) {
           // Use the property from the event data directly when available, otherwise extract it
-          const propertyName = property || (() => {
+          const propertyName = Property || (() => {
             const parsedPath = ModelPathUtils.parseObjectPath(standardizedFullPath);
             return parsedPath.segments[parsedPath.segments.length - 1];
           })();
           
           // Use the objectPath from the event data when available, otherwise extract it
-          const objectPathValue = objectPath || (() => {
+          const objectPathValue = ObjectPath || (() => {
             const parsedPath = ModelPathUtils.parseObjectPath(standardizedFullPath);
             const objectSegments = parsedPath.segments.slice(0, -1);
             const objectIndices = parsedPath.indices.slice(0, parsedPath.indices.length - (parsedPath.segments.length - objectSegments.length));
@@ -548,9 +580,9 @@ export class ClientModel extends EventListener {
           this._app.eventManager.dispatchEvent(EventTypes.MODEL_TO_VIEW_PROPERTY_CHANGED, {
             ObjectPath: objectPathValue,
             Property: propertyName,
-            Value: value,
-            OldValue: oldValue,
-            Source: source || 'view'
+            Value: Value,
+            OldValue: OldValue,
+            Source: Source || 'view'
           });
           console.debug(`Dispatched MODEL_TO_VIEW_PROPERTY_CHANGED for path ${standardizedPath}`);
         }
@@ -1360,6 +1392,80 @@ sendPropertyChangeToServer(path, value) {
       console.error(`Error getting property info for ${className}.${propName}:`, error);
       return null;
     }
+  }
+  
+  /**
+   * Validate a property change before applying it
+   * @param {Object} rootInstance - The root model instance
+   * @param {string} path - The full path to the property being changed
+   * @param {any} newValue - The proposed new value
+   * @returns {Object} Validation result with errors array
+   * @private
+   */
+  _validatePropertyChange(rootInstance, path, newValue) {
+    const result = { errors: [] };
+    
+    try {
+      // Parse the path to extract the last object and property
+      const pathInfo = ModelPathUtils.parseObjectPath(path);
+      const propertyName = pathInfo.segments[pathInfo.segments.length - 1];
+      
+      // Get the object that contains this property
+      const parentPath = pathInfo.segments.length > 1 ? 
+        ModelPathUtils.createObjectPath(
+          pathInfo.segments.slice(0, -1), 
+          pathInfo.indices.slice(0, pathInfo.indices.length - (pathInfo.segments.length > 1 ? 1 : 0))
+        ) : '';
+      
+      const parentObject = parentPath ? 
+        ModelPathUtils.getValueFromObjectPath(rootInstance, parentPath) : 
+        rootInstance;
+        
+      if (!parentObject) {
+        console.error(`Cannot find parent object at path ${parentPath}`);
+        return result;
+      }
+      
+      // Get the class name of the parent object
+      const className = parentObject.constructor?.className || 
+                       parentObject.constructor?.name ||
+                       'UnknownClass';
+      
+      // Get all constraints that could be affected by this property change
+      const constraints = this._validationManager.getConstraintsForProperty(className, propertyName);
+      
+      if (!constraints || constraints.length === 0) {
+        // No constraints for this property, validation passes
+        return result;
+      }
+      
+      // Create a temporary object with the proposed change to validate constraints
+      const tempObject = {...parentObject};
+      tempObject[propertyName] = newValue;
+      
+      // Check each constraint
+      for (const item of constraints) {
+        if (item.type === 'property') {
+          // Property-level validation
+          const error = this._validationManager.validatePropertyValue(newValue, item.validation);
+          if (error) {
+            result.errors.push(error);
+          }
+        } else if (item.type === 'constraint') {
+          // Class-level constraint
+          const error = this._validationManager.evaluateConstraint(tempObject, item.constraint);
+          if (error) {
+            result.errors.push(error);
+          }
+        }
+      }
+      
+    } catch (error) {
+      console.error('Error during property validation:', error);
+      result.errors.push(`Internal validation error: ${error.message}`);
+    }
+    
+    return result;
   }
 }
 

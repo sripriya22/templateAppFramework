@@ -21,6 +21,7 @@ export const EventTypes = Object.freeze({
   SERVER_WARNING: 'server_warning',
   MATLAB_METHOD_CALL_REQUEST: 'matlab_method_call_request',
   SERVER_NOTIFICATION: 'server_notification',
+  PROPERTY_CHANGE_REJECTED: 'property_change_rejected',
 
   // Server events
   SERVER_MODEL_PROPERTY_UPDATED: 'server_model_property_updated',
@@ -54,17 +55,18 @@ export const EventTypes = Object.freeze({
     // View-to-Model Property Changed Event (when view updates model)
     VIEW_TO_MODEL_PROPERTY_CHANGED: {
       required: {
-        path: { type: 'string', description: 'The full path to the property that changed (backward compatibility)' },
-        objectPath: { type: 'string', description: 'The path to the object containing the property' },
-        property: { type: 'string', description: 'The name of the property that changed' },
-        value: { type: 'any', description: 'The new value of the property' }
+        Path: { type: 'string', description: 'The full path to the property that changed (backward compatibility)' },
+        ObjectPath: { type: 'string', description: 'The path to the object containing the property' },
+        Property: { type: 'string', description: 'The name of the property that changed' },
+        Value: { type: 'any', description: 'The new value of the property' }
       },
       optional: {
-        oldValue: { type: 'any', description: 'The previous value of the property' },
-        model: { type: 'object', description: 'The model object containing the property' },
-        source: { type: 'string', description: 'The source of the change (e.g., "view", "binding", "component")' },
-        uid: { type: 'number', description: 'The unique ID of the model instance' },
-        className: { type: 'string', description: 'The class name of the model' }
+        OldValue: { type: 'any', description: 'The previous value of the property' },
+        Model: { type: 'object', description: 'The model object containing the property' },
+        Source: { type: 'string', description: 'The source of the change (e.g., "view", "binding", "component")' },
+        UID: { type: 'number', description: 'The unique ID of the model instance' },
+        ClassName: { type: 'string', description: 'The class name of the model' },
+        SourceView: { type: 'object', description: 'Reference to the source view element that triggered the change' }
       }
     },
     
@@ -171,6 +173,19 @@ export const EventTypes = Object.freeze({
       },
       optional: {
         Source: { type: 'string', description: 'Source of the notification' }
+      }
+    },
+    
+    // Property Change Rejected Event
+    PROPERTY_CHANGE_REJECTED: {
+      required: {
+        PropertyPath: { type: 'string', description: 'The property path that failed validation' },
+        RejectedValue: { type: 'any', description: 'The rejected value that failed validation' },
+        ValidationErrors: { type: 'array', description: 'Array of validation error messages' }
+      },
+      optional: {
+        CurrentValue: { type: 'any', description: 'The current valid value of the property' },
+        Source: { type: 'string', description: 'Source of the validation check' }
       }
     }
   },

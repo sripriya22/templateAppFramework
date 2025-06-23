@@ -28,6 +28,12 @@ export class BindingManager {
       this._handleModelToViewPropertyChanged.bind(this)
     );
     
+    // Subscribe to property change rejection events for validation failures
+    this.eventManager.addEventListener(
+      EventTypes.PROPERTY_CHANGE_REJECTED,
+      this._handlePropertyChangeRejected.bind(this)
+    );
+    
     this.createBinding = this.createBinding.bind(this);
     this.removeBinding = this.removeBinding.bind(this);
     this.removeAllBindings = this.removeAllBindings.bind(this);
@@ -257,6 +263,89 @@ export class BindingManager {
       }
       
       return false;
+    });
+  }
+  
+  /**
+   * Handle property change rejection events from validation failures
+   * @param {Object} eventData - The event data with validation details
+   * @param {string} eventData.PropertyPath - Full path to the rejected property
+   * @param {any} eventData.RejectedValue - The value that failed validation
+   * @param {Array} eventData.ValidationErrors - Array of validation error messages
+   * @param {any} eventData.CurrentValue - The current valid value to revert to
+   * @param {string} eventData.Source - Source of the validation rejection
+   * @param {HTMLElement} eventData.SourceView - The view element that triggered the change
+   * @private
+   */
+  _handlePropertyChangeRejected(eventData) {
+    if (!eventData || !eventData.PropertyPath) {
+      console.error('Invalid event data in _handlePropertyChangeRejected:', eventData);
+      return;
+    }
+    
+    console.warn(`Property change rejected: ${eventData.PropertyPath}`, eventData);
+    
+    // Parse the path to get objectPath and property
+    let objectPath = '';
+    let property = '';
+    
+    try {
+      const pathInfo = ModelPathUtils.parseObjectPath(eventData.PropertyPath);
+      property = pathInfo.segments[pathInfo.segments.length - 1];
+      
+      if (pathInfo.segments.length > 1) {
+        const objectSegments = pathInfo.segments.slice(0, -1);
+        const objectIndices = pathInfo.indices.slice(0, pathInfo.indices.length - (pathInfo.segments.length - objectSegments.length));
+        objectPath = ModelPathUtils.createObjectPath(objectSegments, objectIndices);
+      }
+    } catch (error) {
+      console.error('Error parsing property path:', error);
+      return;
+    }
+    
+    // Find bindings for this property
+    const matchingBindings = this.getBindingsForObjectPathProperty(objectPath, property);
+    
+    if (matchingBindings.length === 0) {
+      return;
+    }
+    
+    // Process each matching binding
+    matchingBindings.forEach(binding => {
+      if (binding instanceof Binding && binding.view) {
+        // Only handle validation for the source view that triggered the invalid change
+        if (eventData.SourceView === binding.view) {
+          console.log(`Handling validation error for source view: ${eventData.PropertyPath}`);
+          
+          // Call handleValidationError on the binding
+          if (typeof binding.handleValidationError === 'function') {
+            binding.handleValidationError(eventData);
+          } else {
+            console.error('Binding does not have handleValidationError method');
+            
+            // Fallback: apply basic error styling and revert
+            if (eventData.ValidationErrors && eventData.ValidationErrors.length > 0) {
+              binding.view.classList.add('validation-error');
+              binding.view.title = eventData.ValidationErrors.join('\n');
+            }
+            
+            // Update the view with the current valid value
+            binding.handleModelChange({ Value: eventData.CurrentValue });
+          }
+        }
+      } else if (binding instanceof ComponentBinding) {
+        // For component bindings, notify the component about the validation error
+        if (binding.updateCallback && typeof binding.updateCallback === 'function') {
+          // Pass the validation error to the component callback
+          binding.updateCallback(null, eventData.PropertyPath, {
+            isValidationError: true,
+            rejectedValue: eventData.RejectedValue,
+            validationErrors: eventData.ValidationErrors,
+            currentValue: eventData.CurrentValue,
+            sourceView: eventData.SourceView // Pass source view for components that need it
+          });
+        }
+      }
     });
   }
   

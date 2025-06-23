@@ -127,18 +127,15 @@ async function generateModelClass(jsonFile, targetDir, options = {}) {
   const classContent = generateClassFileContent(modelDef, superClass, appName);
   
   // Write the class file directly in the package directory (no @ folders)
-  const classFile = join(targetDir, `${className}.m`);
+  const classFilePath = join(targetDir, `${className}.m`);
   
-  // Check if file exists and should be overwritten
-  if (fs.existsSync(classFile) && !overwrite) {
-    if (verbose) {
-      console.log(`  -> Skipping existing file: ${classFile}`);
-    }
-    return classFile;
+  if (!overwrite && fs.existsSync(classFilePath)) {
+    throw new Error(`Class file already exists: ${classFilePath}`);
   }
   
-  await fsPromises.writeFile(classFile, classContent);
-  return classFile;
+  await fsPromises.writeFile(classFilePath, classContent, 'utf8');
+  
+  return classFilePath;
 }
 
 /**
@@ -149,14 +146,27 @@ async function generateModelClass(jsonFile, targetDir, options = {}) {
  * @returns {string} - MATLAB class file content
  */
 function generateClassFileContent(modelDef, superClass, appName) {
-  const className = modelDef.ClassName;
+  const className = modelDef.ClassName || 'UnnamedClass';
+  const description = modelDef.Description || `${className} class`;
   const properties = modelDef.Properties || {};
-  const description = modelDef.Description || '';
+  const constraints = modelDef.Constraints || [];
   
-  // Start with the class definition
-  let content = `classdef ${className} < ${appName === className ? 'server.model.RootModel' : superClass}\n`;
-  content += '    \n';
+  // Collect properties that need setters because they're involved in constraints
+  const constrainedProps = new Set();
+  if (constraints.length > 0) {
+    constraints.forEach(constraint => {
+      if (constraint.properties && Array.isArray(constraint.properties)) {
+        constraint.properties.forEach(prop => constrainedProps.add(prop));
+      }
+    });
+  }
+  
+  // Start with the class definition and documentation
+  let content = `classdef ${className} < ${superClass}\n`;
   content += '    %\n';
+  content += `    % ${description}\n`;
+  content += '    %\n';
+  content += '    % This class was automatically generated from a JSON model definition.\n';
   
   // Separate properties into read-only and public
   const readOnlyProps = {};
@@ -172,7 +182,7 @@ function generateClassFileContent(modelDef, superClass, appName) {
   }
   
   // Read-only properties section
-  content += '    properties (SetObservable, GetAccess=public, SetAccess=?server.model.BaseObject)\n';
+  content += '\n    properties (SetObservable, GetAccess=public, SetAccess=?server.model.BaseObject)\n';
   let hasReadOnlyProps = false;
   for (const propName in readOnlyProps) {
     hasReadOnlyProps = true;
@@ -197,6 +207,106 @@ function generateClassFileContent(modelDef, superClass, appName) {
   }
   content += '    end\n\n';
   
+  // Methods section
+  content += '    methods\n';
+  
+  // Constructor
+  content += `        function obj = ${className}()\n`;
+  content += '            % Constructor\n';
+  content += `            obj = obj@${superClass}();\n`;
+  content += '        end\n\n';
+  
+  // Generate property setters for constrained properties
+  if (constrainedProps.size > 0) {
+    // Iterate through the constrained properties and generate setters
+    for (const propName of constrainedProps) {
+      // Skip properties that don't exist in the model definition
+      if (!properties[propName]) continue;
+      // Skip read-only properties
+      if (properties[propName].ReadOnly) continue;
+      
+      content += `        function set.${propName}(obj, value)\n`;
+      content += `            % Setter for ${propName} with constraint validation\n`;
+      
+      // Add type checking for arrays if applicable
+      const propDef = properties[propName];
+      if (propDef.IsArray && propDef.Type && !propDef.IsPrimitive) {
+        // For arrays of custom objects
+        content += '            % Verify array elements are of correct type\n';
+        
+        // Type checking switch based on whether it's a primitive type or custom class
+        if (['cell', 'struct', 'table', 'char', 'string', 'double', 'single', 
+             'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'logical'].includes(propDef.Type)) {
+          // Built-in MATLAB type
+          content += `            if ~isempty(value) && ~isa(value, '${propDef.Type}')\n`;
+          content += `                error('Value must be of type ${propDef.Type}');\n`;
+          content += '            end\n';
+        } else {
+          // Custom class type - needs app namespace qualification
+          const fullClassName = propDef.Type.includes('.') ? propDef.Type : `${appName}.${propDef.Type}`;
+          content += '            if ~isempty(value)\n';
+          content += '                % Check each element in the array\n';
+          content += '                for i = 1:numel(value)\n';
+          content += `                    if ~isa(value(i), '${fullClassName}')\n`;
+          content += `                        error('All elements must be of type ${fullClassName}');\n`;
+          content += '                    end\n';
+          content += '                end\n';
+          content += '            end\n';
+        }
+      }
+      
+      content += `            obj.${propName} = value;\n`;
+      content += '            % Validate constraints after setting the value\n';
+      content += '            obj.validateConstraints();\n'; // Call method as obj.validateConstraints()
+      content += '        end\n\n';
+    }
+  }
+  
+  // Generate constraint validation method if constraints exist
+  if (constraints.length > 0) {
+    content += '        function validateConstraints(obj)\n';
+    content += '            % Validate cross-property constraints\n';
+    content += '            % This method is called from property setters and can be invoked manually\n';
+    
+    // Add each constraint check
+    constraints.forEach(constraint => {
+      const condition = constraint.condition;
+      const errorMessage = constraint.errorMessage || 'Constraint violation';
+      
+      // Create a MATLAB if statement that checks the condition
+      // Condition is JS-like, needs translation for MATLAB:
+      // 1. Replace JavaScript equality operators
+      // 2. Replace JavaScript logical operators
+      // 3. Replace JavaScript property access (this.propertyName) with MATLAB style (obj.propertyName)
+      // 4. Handle any numeric operators consistently
+      
+      let matlabCondition = condition
+        // Replace equality operators
+        .replace(/===/g, '==')
+        .replace(/!==/g, '~=')
+        .replace(/!=/g, '~=')
+        
+        // Replace logical operators
+        .replace(/&&/g, '&')
+        .replace(/\|\|/g, '|')
+        .replace(/!/g, '~')
+        
+        // Replace property access - this is the key fix
+        // Pattern to match this.property or this['property']
+        .replace(/this\.([a-zA-Z0-9_]+)/g, 'obj.$1')
+        .replace(/this\['([a-zA-Z0-9_]+)'\]/g, 'obj.$1')
+        .replace(/this\["([a-zA-Z0-9_]+)"\]/g, 'obj.$1');
+      
+      content += `            % Check constraint: ${constraint.id || 'unnamed'}\n`;
+      content += `            if ~(${matlabCondition})\n`;
+      content += `                error('${errorMessage.replace(/'/g, "''")}');\n`;
+      content += '            end\n';
+    });
+    
+    content += '        end\n\n';
+  }
+  
+  content += '    end\n';
   content += 'end  % classdef\n';
   
   return content;
@@ -251,10 +361,58 @@ function generatePropertyDefinition(propName, prop, appName) {
     propDef += ` ${propType}`;
   }
   
-  // Add validation for enum values
+  // Add validation from the Validation block
+  if (prop.Validation) {
+    const validation = prop.Validation;
+    const validations = [];
+    
+    // Handle minimum value constraint
+    if (validation.minimum !== undefined) {
+      validations.push(`mustBeGreaterThanOrEqual(${propName}, ${validation.minimum})`);
+    }
+    
+    // Handle maximum value constraint
+    if (validation.maximum !== undefined) {
+      validations.push(`mustBeLessThanOrEqual(${propName}, ${validation.maximum})`);
+    }
+    
+    // Handle non-negative constraint
+    if (validation.nonNegative === true) {
+      validations.push(`mustBeNonnegative(${propName})`);
+    }
+    
+    // Add custom validation functions if specified
+    if (validation.customValidation) {
+      // Support array of custom validations or a single string
+      if (Array.isArray(validation.customValidation)) {
+        validation.customValidation.forEach(customVal => {
+          validations.push(customVal.replace(/\${propName}/g, propName));
+        });
+      } else {
+        validations.push(validation.customValidation.replace(/\${propName}/g, propName));
+      }
+    }
+    
+    // Apply the validations if any exist
+    if (validations.length > 0) {
+      propDef += ` {${validations.join(', ')}}`;      
+    }
+  }
+  
+  // Add validation for enum values 
   if (prop.ValidValues && Array.isArray(prop.ValidValues) && prop.ValidValues.length > 0) {
     const validValuesStr = prop.ValidValues.map(v => `"${v}"`).join(', ');
-    propDef += ` {mustBeMember(${propName}, [${validValuesStr}])}`;
+    // If we already have other validations, don't add a new block
+    if (propDef.includes('{')) {
+      // Extract the existing validation block and add to it
+      const match = propDef.match(/\{([^}]*)\}/);
+      if (match) {
+        const existingValidations = match[1];
+        propDef = propDef.replace(`{${existingValidations}}`, `{${existingValidations}, mustBeMember(${propName}, [${validValuesStr}])}`);
+      }
+    } else {
+      propDef += ` {mustBeMember(${propName}, [${validValuesStr}])}`;  
+    }
   }
   
   // Add default value

@@ -1,0 +1,42 @@
+/**
+ * Validation error CSS styles for form inputs
+ */
+
+/* Style for form controls with validation errors */
+.validation-error {
+  border: 2px solid #e74c3c !important; /* Red border */
+  background-color: rgba(231, 76, 60, 0.05) !important; /* Light red background */
+  box-shadow: 0 0 3px #e74c3c !important; /* Red glow effect */
+}
+
+/* Error message shown below the input */
+.validation-error-message {
+  display: block;
+  color: #e74c3c;
+  font-size: 0.9em;
+  margin-top: 4px;
+  margin-bottom: 8px;
+  padding: 4px;
+  border-radius: 3px;
+  background-color: rgba(231, 76, 60, 0.1);
+  transition: opacity 0.3s ease;
+}
+
+/* Add focus styles that maintain the error state */
+.validation-error:focus {
+  outline: none;
+  border-color: #e74c3c !important;
+  box-shadow: 0 0 5px rgba(231, 76, 60, 0.5) !important;
+}
+
+/* Animation for the error transition */
+@keyframes error-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
+  70% { box-shadow: 0 0 0 5px rgba(231, 76, 60, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(231, 76, 60, 0); }
+}
+
+/* Apply the animation */
+.validation-error {
+  animation: error-pulse 0.8s 1;
+}

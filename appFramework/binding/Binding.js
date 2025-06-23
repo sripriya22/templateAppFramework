@@ -109,10 +109,22 @@ export class Binding {
     // This ensures 'this' refers to the Binding instance inside the handler
     this._boundHandleViewChange = this._handleViewChange.bind(this);
     
-    // Listen for changes on the view element - simple approach with no removeEventListener
+    // Listen for changes on the view element
     try {
-      // Add the event listener directly - no removeEventListener to avoid registration issues
-      this.view.addEventListener(this.events.view, this._boundHandleViewChange);
+      // For text and number inputs, ensure we're only listening for 'change' events (blur/enter)
+      // This prevents validation from running on every keystroke
+      if (this.view.tagName === 'INPUT' && 
+          (this.view.type === 'text' || this.view.type === 'number')) {
+        // Force 'change' event instead of whatever might be in this.events.view
+        // This ensures validation only runs when the user completes their input
+        console.debug(`Binding for ${this.objectPath}.${this.property}: Using 'change' event for text/number input`);
+        this.view.addEventListener('change', this._boundHandleViewChange);
+      } else {
+        // For all other elements, use the configured event
+        console.debug(`Binding for ${this.objectPath}.${this.property}: Using '${this.events.view}' event`);
+        this.view.addEventListener(this.events.view, this._boundHandleViewChange);
+      }
+      
       // Store a reference to the binding on the element for debugging
       this.view.__binding = this;
     } catch (error) {
@@ -275,6 +287,11 @@ export class Binding {
       return 'change';
     }
     
+    // For numeric fields and text inputs, use 'change' event to validate on blur or enter
+    if (view.tagName === 'INPUT' && (view.type === 'number' || view.type === 'text')) {
+      return 'change';
+    }
+    
     // Default to 'input' for most form elements
     return 'input';
   }
@@ -294,15 +311,14 @@ export class Binding {
     
     console.log(`Binding requesting model update for ${this.objectPath}.${this.property} with value:`, value);
     
-    // Dispatch a view-to-model change event with objectPath and property fields
+    // Dispatch a view-to-model change event using PascalCase property names as defined in EventTypes.js
     this.eventManager.dispatchEvent(EventTypes.VIEW_TO_MODEL_PROPERTY_CHANGED, {
-      // Use camelCase as required by EventTypes.js for this event
-      objectPath: this.objectPath, // Object path without property
-      property: this.property,     // Property name only
-      // Include path for backward compatibility as required by EventTypes.js schema
-      path: `${this.objectPath}.${this.property}`,
-      value: value,                
-      source: 'binding'
+      ObjectPath: this.objectPath,
+      Property: this.property,
+      Path: `${this.objectPath}.${this.property}`,
+      Value: value,
+      Source: 'binding',
+      SourceView: this.view
     });
   }
   
@@ -311,6 +327,131 @@ export class Binding {
    */
   updateViewFromModel() {
     this._updateViewFromModel();
+  }
+  
+  /**
+   * Handle validation errors from the model by showing error state and setting up temporary listeners
+   * for escape key and blur events to revert the value
+   * @param {Object} eventData - The validation error event data
+   */
+  handleValidationError(eventData) {
+    // Apply validation error styling
+    if (eventData.ValidationErrors && eventData.ValidationErrors.length > 0) {
+      // Add visual styling
+      this.view.classList.add('validation-error');
+      this.view.title = eventData.ValidationErrors.join('\n');
+      
+      // Create or update an error message element below the input
+      this._showValidationErrorMessage(this.view, eventData.ValidationErrors.join('\n'));
+      
+      // Store the current valid value from the model for later use
+      this._lastValidValue = eventData.CurrentValue;
+      
+      // Add temporary escape key handler
+      this._boundHandleEscapeKey = this._handleEscapeKey.bind(this);
+      this.view.addEventListener('keydown', this._boundHandleEscapeKey);
+      
+      // Add temporary blur handler
+      this._boundHandleBlur = this._handleBlur.bind(this);
+      this.view.addEventListener('blur', this._boundHandleBlur);
+      
+      // Don't call handleModelChange as it requires ObjectPath and Property
+      // Instead, directly update the view with the current valid value
+      this._updateViewFromModel(eventData.CurrentValue);
+    }
+  }
+  
+  /**
+   * Shows validation error message below the input field
+   * @param {HTMLElement} inputElement - The input element
+   * @param {string} errorMessage - Error message to display
+   * @private
+   */
+  _showValidationErrorMessage(inputElement, errorMessage) {
+    // Check if there's already an error message element
+    let errorElement = inputElement.nextElementSibling;
+    if (!errorElement || !errorElement.classList.contains('validation-error-message')) {
+      // Create a new error message element
+      errorElement = document.createElement('div');
+      errorElement.classList.add('validation-error-message');
+      
+      // Insert it after the input element
+      if (inputElement.parentNode) {
+        inputElement.parentNode.insertBefore(errorElement, inputElement.nextSibling);
+      }
+    }
+    
+    // Update the error message text
+    errorElement.textContent = errorMessage;
+  }
+  
+  /**
+   * Handle Escape key press - revert to the last valid value
+   * @param {KeyboardEvent} event - The keyboard event
+   * @private
+   */
+  _handleEscapeKey(event) {
+    if (event.key === 'Escape') {
+      console.log('Escape pressed, reverting to last valid value');
+      
+      // Stop the event from propagating
+      event.preventDefault();
+      event.stopPropagation();
+      
+      this._clearValidationErrorAndRevert();
+    }
+  }
+  
+  /**
+   * Handle blur event - revert to last valid value if still in error state
+   * @private
+   */
+  _handleBlur() {
+    if (this.view.classList.contains('validation-error')) {
+      console.log('Blur event on field with validation error, reverting to last valid value');
+      this._clearValidationErrorAndRevert();
+    }
+  }
+  
+  /**
+   * Clear validation error styling and revert to the last valid value
+   * @private
+   */
+  _clearValidationErrorAndRevert() {
+    // Remove validation error styling
+    this.view.classList.remove('validation-error');
+    this.view.removeAttribute('title');
+    
+    // Remove error message if present
+    const errorElement = this.view.nextElementSibling;
+    if (errorElement && errorElement.classList.contains('validation-error-message')) {
+      errorElement.parentNode.removeChild(errorElement);
+    }
+    
+    // Remove temporary event listeners
+    if (this._boundHandleEscapeKey) {
+      this.view.removeEventListener('keydown', this._boundHandleEscapeKey);
+      this._boundHandleEscapeKey = null;
+    }
+    
+    if (this._boundHandleBlur) {
+      this.view.removeEventListener('blur', this._boundHandleBlur);
+      this._boundHandleBlur = null;
+    }
+    
+    // Update the view with the last valid value (if available)
+    if (this._lastValidValue !== undefined) {
+      // Programmatically update UI without triggering validation
+      if (this.viewAttribute === 'value') {
+        this.view.value = this.formatter(this._lastValidValue);
+      } else if (this.viewAttribute === 'checked') {
+        this.view.checked = Boolean(this._lastValidValue);
+      } else if (this.viewAttribute === 'innerHTML') {
+        this.view.innerHTML = this._lastValidValue;
+      } else {
+        this.view[this.viewAttribute] = this._lastValidValue;
+      }
+    }
   }
   
   /**
