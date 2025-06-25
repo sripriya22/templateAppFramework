@@ -330,34 +330,60 @@ export class Binding {
   }
   
   /**
-   * Handle validation errors from the model by showing error state and setting up temporary listeners
-   * for escape key and blur events to revert the value
+   * Handle validation errors from the model by showing error state and tooltip
+   * Allow user to see invalid value for 2 seconds, then auto-revert
    * @param {Object} eventData - The validation error event data
    */
   handleValidationError(eventData) {
     // Apply validation error styling
     if (eventData.ValidationErrors && eventData.ValidationErrors.length > 0) {
+      const errorMessage = eventData.ValidationErrors.join('\n');
+      
       // Add visual styling
       this.view.classList.add('validation-error');
-      this.view.title = eventData.ValidationErrors.join('\n');
       
-      // Create or update an error message element below the input
-      this._showValidationErrorMessage(this.view, eventData.ValidationErrors.join('\n'));
+      // Wrap view in tooltip container if needed
+      let container = this.view.parentElement;
+      if (!container.classList.contains('validation-tooltip-container')) {
+        // Create tooltip container
+        container = document.createElement('div');
+        container.classList.add('validation-tooltip-container');
+        
+        // Insert container in the DOM
+        const parent = this.view.parentElement;
+        parent.insertBefore(container, this.view);
+        container.appendChild(this.view);
+      }
+      
+      // Remove any existing tooltips
+      const existingTooltip = container.querySelector('.validation-tooltip');
+      if (existingTooltip) {
+        container.removeChild(existingTooltip);
+      }
+      
+      // Create and add tooltip
+      const tooltip = document.createElement('div');
+      tooltip.classList.add('validation-tooltip');
+      tooltip.textContent = errorMessage;
+      container.appendChild(tooltip);
+      
+      // Make tooltip visible (triggers CSS transition)
+      setTimeout(() => {
+        tooltip.classList.add('visible');
+      }, 10);
       
       // Store the current valid value from the model for later use
       this._lastValidValue = eventData.CurrentValue;
       
-      // Add temporary escape key handler
+      // Add temporary escape key handler for immediate revert if desired
       this._boundHandleEscapeKey = this._handleEscapeKey.bind(this);
       this.view.addEventListener('keydown', this._boundHandleEscapeKey);
       
-      // Add temporary blur handler
-      this._boundHandleBlur = this._handleBlur.bind(this);
-      this.view.addEventListener('blur', this._boundHandleBlur);
-      
-      // Don't call handleModelChange as it requires ObjectPath and Property
-      // Instead, directly update the view with the current valid value
-      this._updateViewFromModel(eventData.CurrentValue);
+      // Start a timer to automatically revert after 2 seconds
+      this._validationRevertTimer = setTimeout(() => {
+        console.log('Validation error timeout reached, reverting to last valid value');
+        this._clearValidationErrorAndRevert();
+      }, 2000); // 2000ms = 2 seconds
     }
   }
   
@@ -418,14 +444,30 @@ export class Binding {
    * @private
    */
   _clearValidationErrorAndRevert() {
+    // Cancel any pending validation revert timer
+    if (this._validationRevertTimer) {
+      clearTimeout(this._validationRevertTimer);
+      this._validationRevertTimer = null;
+    }
+    
     // Remove validation error styling
     this.view.classList.remove('validation-error');
-    this.view.removeAttribute('title');
     
-    // Remove error message if present
-    const errorElement = this.view.nextElementSibling;
-    if (errorElement && errorElement.classList.contains('validation-error-message')) {
-      errorElement.parentNode.removeChild(errorElement);
+    // Clean up tooltip container and tooltip
+    const container = this.view.parentElement;
+    if (container && container.classList.contains('validation-tooltip-container')) {
+      // First remove the tooltip
+      const tooltip = container.querySelector('.validation-tooltip');
+      if (tooltip) {
+        container.removeChild(tooltip);
+      }
+      
+      // Then unwrap the view from the container
+      if (container.parentElement) {
+        const parent = container.parentElement;
+        parent.insertBefore(this.view, container);
+        parent.removeChild(container);
+      }
     }
     
     // Remove temporary event listeners
