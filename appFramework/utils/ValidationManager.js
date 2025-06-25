@@ -78,12 +78,24 @@ export default class ValidationManager {
    * @returns {string|null} - Error message or null if valid
    */
   validatePropertyValue(value, validation) {
+    // Handle inclusive minimum (>=)
     if (validation.minimum !== undefined && value < validation.minimum) {
       return validation.errorMessage || `Value must be at least ${validation.minimum}`;
     }
     
+    // Handle exclusive minimum (>)
+    if (validation.exclusiveMinimum !== undefined && value <= validation.exclusiveMinimum) {
+      return validation.errorMessage || `Value must be greater than ${validation.exclusiveMinimum}`;
+    }
+    
+    // Handle inclusive maximum (<=)
     if (validation.maximum !== undefined && value > validation.maximum) {
       return validation.errorMessage || `Value must be at most ${validation.maximum}`;
+    }
+    
+    // Handle exclusive maximum (<)
+    if (validation.exclusiveMaximum !== undefined && value >= validation.exclusiveMaximum) {
+      return validation.errorMessage || `Value must be less than ${validation.exclusiveMaximum}`;
     }
     
     if (validation.type === 'number' && isNaN(Number(value))) {
@@ -100,8 +112,6 @@ export default class ValidationManager {
         return validation.errorMessage || 'Value does not match the required pattern';
       }
     }
-    
-    // Add more validations as needed
     
     return null; // No validation error
   }

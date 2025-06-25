@@ -367,8 +367,27 @@ export class Binding {
       tooltip.textContent = errorMessage;
       container.appendChild(tooltip);
       
-      // Make tooltip visible (triggers CSS transition)
+      // Adjust tooltip position if it would be cut off at screen edge
       setTimeout(() => {
+        // Get position information
+        const tooltipRect = tooltip.getBoundingClientRect();
+        const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+        
+        // Check if tooltip would be cut off on left side
+        if (tooltipRect.left < 10) { // 10px buffer
+          // Adjust position to keep the tooltip visible
+          tooltip.style.left = '0';
+          tooltip.style.transform = 'none';
+        }
+        
+        // Check if tooltip would be cut off on right side
+        if (tooltipRect.right > (viewportWidth - 10)) { // 10px buffer
+          // Adjust position to keep the tooltip visible
+          tooltip.style.left = '100%';
+          tooltip.style.transform = 'translateX(-100%)';
+        }
+        
+        // Make tooltip visible (triggers CSS transition)
         tooltip.classList.add('visible');
       }, 10);
       

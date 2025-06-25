@@ -269,15 +269,34 @@ export class ClientModel extends EventListener {
         // Get the value from data if present, or use default
         let value = data.hasOwnProperty(key) ? data[key] : propDef.Default;
         
-        // Handle array properties - ensure they're always arrays, even with single values
+        // Handle scalar/array type mismatches
+        if (value !== null && value !== undefined) {
+          // Case 1: Convert non-array values to arrays for array properties
+          if (propDef && propDef.IsArray === true) {
+            // Convert non-array values to arrays
+            const arrayValue = Array.isArray(value) ? value : [value];
+            value = arrayValue;
+          } 
+          // Case 2: Handle arrays for scalar properties
+          // This is needed because MATLAB sometimes sends scalar strings as arrays
+          else if (propDef && propDef.IsArray === false && Array.isArray(value)) {
+            if (value.length === 1) {
+              // Unwrap single-element arrays for scalar properties
+              value = value[0];
+            } else if (value.length > 1) {
+              // Error if a scalar property receives a multi-element array
+              throw new Error(`Property '${key}' is defined as a scalar but received an array with ${value.length} elements`);
+            }
+          }
+        }
+        
+        // Handle array properties
         if (propDef && propDef.IsArray === true && value !== null && value !== undefined) {
-          // Convert non-array values to arrays
-          const arrayValue = Array.isArray(value) ? value : [value];
           
           // For arrays of complex types (non-primitive objects), we need to instantiate each item
           if (propDef.Type && !propDef.IsPrimitive) {
             // Create a properly typed array by instantiating each element with the correct class
-            this[key] = arrayValue.map(item => {
+            this[key] = value.map(item => {
               if (item === null || item === undefined) {
                 return item;
               }
@@ -304,7 +323,7 @@ export class ClientModel extends EventListener {
             });
           } else {
             // For primitive types, just assign the array directly
-            this[key] = arrayValue;
+            this[key] = value;
           }
         }
         // Special handling for boolean values to ensure proper type
