@@ -263,6 +263,35 @@ class MyApp extends AbstractApp {
 
 ---
 
+## Distribution and Packaging
+
+### Building the Application for Distribution
+
+1. **Build the Application**:
+   From the project root directory, run:
+   ```bash
+   node build-matlab-package.js gPKPDSimConfigTool
+   ```
+   This will:
+   - Minify all JavaScript and CSS files
+   - Copy all necessary files to the `dist/gPKPDSimConfigTool-dist` directory
+   - Prepare the application for MATLAB packaging
+
+2. **Package for MATLAB**:
+   In MATLAB, navigate to the distribution directory and run:
+   ```matlab
+   cd /path/to/templateAppFramework/dist
+   matlab.apputil.package('gPKPDSimConfigTool.prj')
+   ```
+   
+   **Prerequisites**:
+   - Ensure the `.prj` file is already created in the `dist` directory
+   - MATLAB must be on your system path
+   - All required MATLAB toolboxes must be installed
+
+3. **Output**:
+   The packaged application will be created as a `.mlappinstall` file in the `dist` directory.
+
 ### **MATLAB Integration**
 
 - **Key Components**:
