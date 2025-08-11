@@ -178,7 +178,9 @@ export class ArrayTableComponent extends BaseComponent {
             property: column.Key,
             view: input,
             viewAttribute: input.type === 'checkbox' ? 'checked' : 'value',
-            viewEvent: 'input'
+            viewEvent: 'input',
+            // Add parser for numeric values to ensure proper type conversion
+            parser: propType === 'number' ? val => parseFloat(val) : val => val
         }, this);
         
         // Create dependent bindings for editability, visibility, etc.

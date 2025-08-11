@@ -355,6 +355,8 @@ classdef RootModel < server.model.BaseObject
                 if prop.SetObservable
                     % Create a listener for this property's PostSet event
                     addlistener(modelObj, prop.Name, 'PostSet', @obj.onPropertyChanged);
+                else
+                    x = 22;
                 end
             end
         end

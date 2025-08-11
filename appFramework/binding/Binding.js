@@ -243,6 +243,13 @@ export class Binding {
       this.view.textContent = formattedValue;
     } else if (this.viewAttribute === 'innerHTML') {
       this.view.innerHTML = formattedValue;
+    } else if (this.viewAttribute === 'custom') {
+      // For custom components with their own update methods
+      if (typeof this.view.updateValue === 'function') {
+        this.view.updateValue(value); // Pass original value, not formatted
+      } else {
+        console.error('View does not have updateValue method for custom binding');
+      }
     } else {
       // For other attributes, try both property and attribute setting
       try {

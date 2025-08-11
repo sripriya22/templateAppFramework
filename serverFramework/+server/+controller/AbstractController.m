@@ -248,9 +248,33 @@ classdef AbstractController < handle
         end
     end    
 
-    methods(Static)
-        function testFcn()            
-            disp("Called testFcn");
+    methods(Static, Access=protected)
+        function filepath = getFilePath(mode, filepath, supportedExtensions)
+            arguments
+                mode (1,1) string {mustBeMember(mode, ["save", "load"])}
+                filepath (1,1) string = missing
+                supportedExtensions {mustBeText} = ''
+            end
+
+            if mode == "save"
+                fcn = @uiputfile;
+                title = "Save file";
+            else
+                fcn = @uigetfile;
+                title = "Choose file";
+            end
+
+            if ismissing(filepath)
+                % Prompt user for load location
+                [filename, pathname] = fcn(supportedExtensions, title);
+
+                % If user cancels, return
+                if isequal(filename, 0) || isequal(pathname, 0)
+                    error("User cancelled action");
+                end
+
+                filepath = fullfile(pathname, filename);
+            end
         end
     end
 end
