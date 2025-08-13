@@ -187,11 +187,19 @@ fieldset.array-section legend {
     overflow: hidden;
 }
 
+.array-table-component {
+    /* Container for the entire component */
+    display: flex;
+    flex-direction: column;
+}
+
 .array-table-container {
-    max-height: 300px;
+    max-height: 400px; /* Increased height for better usability */
     overflow-y: auto;
     /* Custom scrollbar for table container */
     scrollbar-width: thin;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
 }
 
 .array-table-container::-webkit-scrollbar {
@@ -243,8 +251,8 @@ table.array-table th {
     font-weight: 600; /* Increased from 500 to 600 for bolder headers */
     font-size: 13px;
     color: #444; /* Slightly darker for better contrast */
-    position: sticky;
-    top: 0;
+    /* Remove sticky positioning to fix scrolling issues */
+    position: relative;
     z-index: 1;
 }
 

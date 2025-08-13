@@ -16,6 +16,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const terser = require('terser');
 const CleanCSS = require('clean-css');
+const minimatch = require('minimatch');
 
 // Get app name from command-line arguments
 const appName = process.argv[2];
@@ -32,7 +33,7 @@ if (!appName) {
 const config = {
   sourceRoot: __dirname,
   distRoot: path.join(__dirname, 'dist'),
-  packageName: `${appName}-dist`,  // Changed from -matlab-package to -dist
+  packageName: `${appName}-dist`,
   appName: appName,
   paths: {
     appDir: `apps/${appName}`,
@@ -40,6 +41,37 @@ const config = {
     serverFramework: 'serverFramework'
   }
 };
+
+// File exclusion patterns (relative to source root)
+const EXCLUDE_PATTERNS = [
+  // Directories
+  '**/test/**',
+  '**/__tests__/**',
+  '**/spec/**',
+  '**/node_modules/**',
+  '**/coverage/**',
+  '**/.*', // Hidden files/directories
+  // Files
+  '**/*.test.js',
+  '**/*.spec.js',
+  '**/*.map',
+  '**/JSStore*',
+  '**/jsstore*',
+  '**/package-lock.json',
+  '**/yarn.lock',
+  '**/tsconfig*.json',
+  '**/webpack*.js',
+  '**/babel*.js',
+  '**/jest*.js',
+  '**/karma*.js',
+  // Development files
+  '**/*.md',
+  '**/.gitignore',
+  '**/.eslintrc*',
+  '**/.prettierrc*',
+  '**/README*',
+  '**/CONTRIBUTING*'
+];
 
 // File processing options
 const terserOptions = {
@@ -57,101 +89,80 @@ const terserOptions = {
  * Main function to build and package the app
  */
 async function buildMatlabPackage() {
-  // Ensure dist root exists
-  await fs.ensureDir(config.distRoot);
-  
-  // Set up path structure
-  const packageDir = path.join(config.distRoot, config.packageName);
-  // Place app-specific folder inside an apps directory
-  const appsDir = path.join(packageDir, 'apps');
-  const appDir = path.join(appsDir, config.appName);
-
-  console.log(`Building distribution for ${config.appName}`);
-  console.log(`Output directory: ${packageDir}`);
-  
   try {
-    // Clean output directory
-    await fs.emptyDir(packageDir);
-    // Ensure apps directory exists
+    // Ensure dist root exists
+    await fs.ensureDir(config.distRoot);
+    
+    // Set up path structure
+    const packageDir = path.join(config.distRoot, config.packageName);
+    // Place app-specific folder inside an apps directory
+    const appsDir = path.join(packageDir, 'apps');
+    const appDir = path.join(appsDir, config.appName);
+
+    console.log(`Building distribution for ${config.appName}`);
+    console.log(`Output directory: ${packageDir}`);
+
+    // Clean up target directory if it exists
+    if (await fs.pathExists(packageDir)) {
+      await fs.remove(packageDir);
+    }
+
+    // Create necessary directories
     await fs.ensureDir(appsDir);
-    await fs.ensureDir(appDir);
-    
+    await fs.ensureDir(path.join(packageDir, 'appFramework'));
+    await fs.ensureDir(path.join(packageDir, 'serverFramework'));
+
     // 1. Process app-specific files
-    const appSourceDir = path.join(config.sourceRoot, config.paths.appDir);
     console.log(`\nProcessing app-specific files from ${config.paths.appDir}...`);
-    await processDirectory(appSourceDir, appDir);
-    
-    // 2. Process appFramework files
-    const appFrameworkSrc = path.join(config.sourceRoot, config.paths.appFramework);
-    const appFrameworkDest = path.join(packageDir, config.paths.appFramework);
+    await processDirectory(
+      path.join(config.sourceRoot, config.paths.appDir),
+      appDir
+    );
+
+    // 2. Process app framework files
     console.log(`\nProcessing appFramework files...`);
-    await processDirectory(appFrameworkSrc, appFrameworkDest);
-    
-    // 3. Process serverFramework files
-    const serverFrameworkSrc = path.join(config.sourceRoot, config.paths.serverFramework);
-    const serverFrameworkDest = path.join(packageDir, config.paths.serverFramework);
+    await processDirectory(
+      path.join(config.sourceRoot, config.paths.appFramework),
+      path.join(packageDir, config.paths.appFramework)
+    );
+
+    // 3. Process server framework files
     console.log(`\nProcessing serverFramework files...`);
-    await processDirectory(serverFrameworkSrc, serverFrameworkDest);
-    
-    // 4. Process MATLAB dependencies from config file
-    const configPath = path.join(config.sourceRoot, config.paths.appDir, 'build-matlab-config.json');
-    console.log(`\nChecking for MATLAB dependencies config at ${configPath}...`);
-    
-    if (await fs.pathExists(configPath)) {
-      try {
-        const appConfig = JSON.parse(await fs.readFile(configPath, 'utf8'));
-        
-        if (appConfig.matlabDependencies && Array.isArray(appConfig.matlabDependencies)) {
-          for (const dep of appConfig.matlabDependencies) {
-            if (dep.sourcePath && dep.targetPath) {
-              const sourceDir = dep.sourcePath;
-              const targetDir = path.join(appDir, dep.targetPath);
-              
-              console.log(`\nCopying ${dep.description || 'dependency'} from ${sourceDir} to ${config.appName}/${dep.targetPath}...`);
-              
-              if (!await fs.pathExists(sourceDir)) {
-                console.warn(`⚠️ Warning: Source directory not found: ${sourceDir}`);
-                continue;
-              }
-              
-              await fs.ensureDir(targetDir);
-              await processDirectory(sourceDir, targetDir);
-            }
-          }
-        }
-      } catch (error) {
-        console.error(`Error processing MATLAB dependencies config: ${error.message}`);
-        console.error('Using default paths as fallback...');
-        
-        // Fallback to hardcoded path for backward compatibility
-        const pkpdSourceDir = '/Users/penarasi/CascadeProjects/gPKPDSim/+PKPD';
-        const pkpdDestDir = path.join(appDir, 'matlab/gPKPDSim/+PKPD');
-        console.log(`\nFalling back to copying gPKPDSim/+PKPD to ${config.appName}/matlab/gPKPDSim/+PKPD...`);
-        
-        if (await fs.pathExists(pkpdSourceDir)) {
-          await fs.ensureDir(pkpdDestDir);
-          await processDirectory(pkpdSourceDir, pkpdDestDir);
-        } else {
-          console.warn(`⚠️ Warning: Default PKPD source directory not found: ${pkpdSourceDir}`);
-        }
+    await processDirectory(
+      path.join(config.sourceRoot, config.paths.serverFramework),
+      path.join(packageDir, config.paths.serverFramework)
+    );
+
+    // 4. Check for MATLAB dependencies config
+    const matlabConfigPath = path.join(
+      config.sourceRoot,
+      config.paths.appDir,
+      'build-matlab-config.json'
+    );
+    console.log(`\nChecking for MATLAB dependencies config at ${matlabConfigPath}...`);
+
+    if (await fs.pathExists(matlabConfigPath)) {
+      const matlabConfig = require(matlabConfigPath);
+      if (matlabConfig.matlabDependencies && Array.isArray(matlabConfig.matlabDependencies)) {
+        console.log('Found MATLAB dependencies config. Processing dependencies...');
+        await processMatlabDependenciesArray(matlabConfig.matlabDependencies, packageDir);
+      } else if (matlabConfig.dependencies) {
+        // Legacy support for old format
+        await processMatlabDependencies(matlabConfig.dependencies, packageDir);
+      } else {
+        console.log('No MATLAB dependencies found in config file.');
       }
-    } else {
-      console.log('No MATLAB dependencies config found. Skipping dependency copying.');
     }
-    
-    // 5. Copy README.md if it exists
-    const readmeSrc = path.join(config.sourceRoot, 'README.md');
-    const readmeDest = path.join(packageDir, 'README.md');
-    if (fs.existsSync(readmeSrc)) {
-      await fs.copy(readmeSrc, readmeDest);
-      console.log('✓ Copied README.md');
-    }
-    
-    // 6. Copy documentation folder if it exists
-    const docsSrc = path.join(config.sourceRoot, 'documentation');
+
+    // 5. Create destination directory for MATLAB code
+    const matlabDir = path.join(appDir, 'matlab');
+    await fs.ensureDir(matlabDir);
+
+    // 6. Copy any documentation
+    const docsDir = path.join(config.sourceRoot, 'documentation');
     const docsDest = path.join(packageDir, 'documentation');
-    if (fs.existsSync(docsSrc)) {
-      await fs.copy(docsSrc, docsDest);
+    if (await fs.pathExists(docsDir)) {
+      await fs.copy(docsDir, docsDest);
       console.log('✓ Copied documentation folder');
     }
 
@@ -179,6 +190,10 @@ async function buildMatlabPackage() {
       console.log('\n✓ Found MLAPP files:');
       mlappFiles.forEach(file => console.log(`  - ${file}`));
     }
+    
+    // 10. Post-build cleanup to remove unwanted directories (test, coverage, etc.)
+    console.log('\nRunning post-build cleanup to remove test and development files...');
+    await cleanupDistribution(packageDir);
 
     console.log(`\nMATLAB package build complete! The package is ready at: ${packageDir}`);
     console.log('You can now use MATLAB\'s mlappinstall tool to create the final MATLAB App package.');
@@ -187,6 +202,18 @@ async function buildMatlabPackage() {
     console.error('Build failed:', err);
     process.exit(1);
   }
+}
+
+/**
+ * Check if a file should be excluded from the build
+ * @param {string} filePath - Absolute file path to check
+ * @returns {boolean} True if the file should be excluded
+ */
+function shouldExclude(filePath) {
+  const relativePath = path.relative(config.sourceRoot, filePath);
+  return EXCLUDE_PATTERNS.some(pattern => 
+    minimatch(relativePath, pattern, { dot: true })
+  );
 }
 
 /**
@@ -202,6 +229,12 @@ async function processDirectory(sourceDir, targetDir) {
       const sourcePath = path.join(sourceDir, entry.name);
       const targetPath = path.join(targetDir, entry.name);
       
+      // Skip excluded files/directories
+      if (shouldExclude(sourcePath)) {
+        console.log(`Skipping excluded: ${path.relative(config.sourceRoot, sourcePath)}`);
+        continue;
+      }
+
       if (entry.isDirectory()) {
         // Create target directory and process its contents
         await fs.ensureDir(targetPath);
@@ -292,13 +325,128 @@ async function minifyCss(sourcePath, targetPath) {
 }
 
 /**
- * Log file processing with path relative to project root
- * @param {string} filePath - File path
- * @param {string} action - Action performed
+ * Find and remove directories from the distribution that match cleanup patterns
+ * @param {string} distDir - Distribution directory to clean
  */
-function logFileProcess(filePath, action) {
-  const relativePath = path.relative(config.sourceRoot, filePath);
-  console.log(`✓ ${action}: ${relativePath}`);
+async function cleanupDistribution(distDir) {
+  // Define patterns for directories to remove
+  const CLEANUP_PATTERNS = [
+    '**/test',
+    '**/tests',
+    '**/__tests__',
+    '**/coverage',
+    '**/node_modules',
+    '**/.git'
+  ];
+
+  const dirsToRemove = [];
+  
+  // Find directories matching cleanup patterns
+  async function findDirsToRemove(dir) {
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+        
+        const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(distDir, fullPath);
+        
+        // Check if this directory matches any pattern
+        const shouldRemove = CLEANUP_PATTERNS.some(pattern => 
+          minimatch(relativePath, pattern, { dot: true }) || 
+          minimatch(entry.name, pattern.replace(/\*\*\//g, ''))
+        );
+        
+        if (shouldRemove) {
+          dirsToRemove.push(fullPath);
+          // Skip further traversal of this directory
+          continue;
+        }
+        
+        // Recursively check subdirectories
+        await findDirsToRemove(fullPath);
+      }
+    } catch (err) {
+      console.error(`Error scanning directory ${dir}:`, err);
+    }
+  }
+  
+  // Start the directory scan
+  await findDirsToRemove(distDir);
+  
+  // Sort directories by depth (deepest first) to avoid dependency issues
+  dirsToRemove.sort((a, b) => b.split(path.sep).length - a.split(path.sep).length);
+  
+  if (dirsToRemove.length === 0) {
+    console.log('No directories to clean up.');
+    return;
+  }
+  
+  // Remove directories
+  for (const dir of dirsToRemove) {
+    try {
+      await fs.remove(dir);
+      console.log(`✓ Removed: ${path.relative(distDir, dir)}`);
+    } catch (err) {
+      console.error(`Failed to remove ${dir}:`, err);
+    }
+  }
+  
+  console.log(`Cleanup complete: Removed ${dirsToRemove.length} directories`);
+}
+
+/**
+ * Process MATLAB dependencies by copying from source to target directory
+ * @param {object} dependencies - Dependencies configuration
+ * @param {string} packageDir - Package directory
+ */
+async function processMatlabDependencies(dependencies, packageDir) {
+  for (const depName in dependencies) {
+    const depConfig = dependencies[depName];
+    const srcPath = path.resolve(config.sourceRoot, depConfig.source);
+    const destPath = path.join(packageDir, config.appName, 'matlab', depConfig.target);
+    
+    console.log(`\nCopying ${depName} from ${srcPath} to ${destPath}...`);
+    
+    if (!await fs.pathExists(srcPath)) {
+      console.error(`⚠ Warning: Source path not found: ${srcPath}`);
+      continue;
+    }
+    
+    await fs.ensureDir(path.dirname(destPath));
+    await fs.copy(srcPath, destPath);
+    console.log(`✓ Copied ${depName}`);
+  }
+}
+
+/**
+ * Process MATLAB dependencies from array format
+ * @param {Array} dependencies - Array of dependency objects
+ * @param {string} packageDir - Package directory
+ */
+async function processMatlabDependenciesArray(dependencies, packageDir) {
+  for (const dep of dependencies) {
+    const srcPath = dep.sourcePath;
+    // Adjust the path to place dependencies in apps/appName/matlab/ directory structure
+    const destPath = path.join(packageDir, 'apps', config.appName, dep.targetPath);
+    const description = dep.description || 'Dependency';
+    
+    console.log(`\nCopying ${description} from ${srcPath} to ${destPath}...`);
+    
+    if (!await fs.pathExists(srcPath)) {
+      console.error(`⚠ Warning: Source path not found: ${srcPath}`);
+      continue;
+    }
+    
+    try {
+      await fs.ensureDir(path.dirname(destPath));
+      await fs.copy(srcPath, destPath);
+      console.log(`✓ Copied ${description}`);
+    } catch (err) {
+      console.error(`Error copying ${description}: ${err.message}`);
+    }
+  }
 }
 
 /**
@@ -367,7 +515,17 @@ async function findMlappFiles(dir) {
   return searchDir(dir);
 }
 
-// Run the build
+/**
+ * Log file processing result
+ * @param {string} filePath - File path that was processed
+ * @param {string} action - Action that was performed
+ */
+function logFileProcess(filePath, action) {
+  const relPath = path.relative(config.sourceRoot, filePath);
+  console.log(`✓ ${action}: ${relPath}`);
+}
+
+// Execute the main function
 buildMatlabPackage().catch(err => {
   console.error('Unhandled error:', err);
   process.exit(1);
