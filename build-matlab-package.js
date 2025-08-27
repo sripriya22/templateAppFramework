@@ -51,6 +51,10 @@ const EXCLUDE_PATTERNS = [
   '**/node_modules/**',
   '**/coverage/**',
   '**/.*', // Hidden files/directories
+  '**/shared/resources',
+  '**/shared/resources/**',
+  '**/apps/*/shared/resources',
+  '**/apps/*/shared/resources/**',
   // Files
   '**/*.test.js',
   '**/*.spec.js',
@@ -58,18 +62,23 @@ const EXCLUDE_PATTERNS = [
   '**/JSStore*',
   '**/jsstore*',
   '**/package-lock.json',
+  '**/package.json',
   '**/yarn.lock',
   '**/tsconfig*.json',
   '**/webpack*.js',
   '**/babel*.js',
   '**/jest*.js',
   '**/karma*.js',
+  '**/build-matlab-config.json',
+  '**/shared/build-matlab-config.json',
+  '**/apps/*/shared/build-matlab-config.json',
   // Development files
   '**/*.md',
   '**/.gitignore',
   '**/.eslintrc*',
   '**/.prettierrc*',
   '**/README*',
+  '**/PACKAGING.md',
   '**/CONTRIBUTING*'
 ];
 
@@ -177,8 +186,8 @@ async function buildMatlabPackage() {
       }
     }
 
-    // 8. Create a MATLAB packaging instructions file
-    await createPackagingInstructions(packageDir);
+    // 8. Skip packaging instructions file creation (excluded per requirement)
+    // await createPackagingInstructions(packageDir);
 
     // 9. Check for MLAPP files
     const mlappFiles = await findMlappFiles(path.join(packageDir, config.appName, 'matlab'));
