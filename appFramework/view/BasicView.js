@@ -61,6 +61,27 @@ export class BasicView extends AbstractView {
             this._setComponent('right', jsonViewer.element);
             this._setComponent('bottom', logConsole.element);
             
+            // Add save button with disk icon
+            toolstrip.addButton({
+                id: 'save-button',
+                label: 'Save',
+                icon: '💾', // Unicode save icon
+                onClick: () => this._handleSave()
+            });
+            
+            // Add load button with folder icon
+            toolstrip.addButton({
+                id: 'load-button',
+                label: 'Load',
+                icon: '📂', // Unicode folder icon
+                onClick: () => this._handleLoad()
+            });
+            
+            // Add separator
+            const separator = document.createElement('div');
+            separator.className = 'toolstrip-separator';
+            toolstrip.element.appendChild(separator);
+            
             // Add test button to toolstrip with SVG icon
             // Use getIconPath helper if available, or direct path if not
             const iconPath = '/assets/icons/model.svg';
@@ -85,6 +106,36 @@ export class BasicView extends AbstractView {
         } catch (error) {
             console.error('Error setting up App View layout:', error);
             throw error;
+        }
+    }
+    
+    /**
+     * Load test model by calling the app's loadTestData method
+     * @returns {Promise<void>}
+     */
+    /**
+     * Handle save button click
+     * @private
+     */
+    _handleSave() {
+        this.log('Save button clicked', 'info');
+        if (this._app?.onSave) {
+            this._app.onSave();
+        } else {
+            console.log('Save functionality not implemented');
+        }
+    }
+    
+    /**
+     * Handle load button click
+     * @private
+     */
+    _handleLoad() {
+        this.log('Load button clicked', 'info');
+        if (this._app?.onLoad) {
+            this._app.onLoad();
+        } else {
+            console.log('Load functionality not implemented');
         }
     }
     

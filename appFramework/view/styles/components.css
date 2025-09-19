@@ -2,49 +2,78 @@
 .toolstrip {
     display: flex;
     flex-direction: row;
+    align-items: stretch;
+    padding: 0;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #d0d0d0;
+    height: 40px;
+    box-sizing: border-box;
+    margin: 0;
+    width: 100%;
+}
+
+.toolstrip-group {
+    display: flex;
     align-items: center;
-    justify-content: flex-end; /* Right-justify buttons */
-    padding: 8px 20px 8px 20px;
-    gap: 8px;
-    background-color: var(--panel-background);
-    /* border-bottom: 1px solid var(--border-color); */
-    /* box-shadow: var(--shadow-light); */
-    width: 100%; /* Ensure full width */
-    box-sizing: border-box; /* Include padding in width calculation */
-    margin-right: 16px; /* Add right margin to the toolstrip */
+    height: 100%;
+    padding: 0 4px;
+}
+
+.toolstrip-group:not(:last-child) {
+    border-right: 1px solid #d0d0d0;
+    margin-right: 4px;
+    padding-right: 8px;
 }
 
 .toolstrip-button {
-    padding: 8px 14px;
-    border: 1px solid var(--border-color);
-    background-color: var(--panel-background);
-    border-radius: var(--border-radius);
+    padding: 0 12px;
+    border: none;
+    background: none;
+    color: #333;
     cursor: pointer;
     font-size: 13px;
-    transition: all 0.2s;
-    color: var(--text-color);
-    font-weight: 600; /* Make text bolder */
-    box-shadow: var(--shadow-light);
-    margin-right: 8px; /* Add right margin to buttons */
+    font-weight: 400;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease;
+    height: 100%;
+    min-width: 28px;
+    margin: 0;
+    border-radius: 0;
 }
 
 .toolstrip-button:hover {
-    background-color: var(--background-color);
-    border-color: var(--primary-color);
-    color: var(--primary-color);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-medium);
+    background-color: #e0e0e0;
 }
 
 .toolstrip-button:active {
-    background-color: var(--primary-color);
-    color: white;
-    border-color: var(--primary-color);
+    background-color: #d0d0d0;
+}
+
+.toolstrip-button .button-icon {
+    margin-right: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    font-size: 16px;
 }
 
 .toolstrip-button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+    background: none;
+}
+
+/* Toolstrip separator */
+.toolstrip-separator {
+    width: 1px;
+    height: 100%;
+    background-color: #d0d0d0;
+    margin: 0;
+    align-self: stretch;
 }
 
 /* Icon for database button */

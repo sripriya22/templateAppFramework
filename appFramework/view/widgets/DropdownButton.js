@@ -18,9 +18,11 @@ export class DropdownButton {
         this.config = config;
         this.id = config.id;
         this.element = null;
-        this.select = null;
-        this.buttonWrapper = null;
-        this._boundChangeHandler = this._handleChange.bind(this);
+        this.button = null;
+        this.menu = null;
+        this.isOpen = false;
+        this._boundClickHandler = this._handleClick.bind(this);
+        this._boundDocumentClickHandler = this._handleDocumentClick.bind(this);
         this._createDropdown();
     }
 
@@ -34,44 +36,13 @@ export class DropdownButton {
         this.element.className = 'dropdown-button-container';
         this.element.id = this.id + '-container';
         
-        // Create button-like wrapper
-        this.buttonWrapper = document.createElement('div');
-        this.buttonWrapper.className = 'dropdown-button toolstrip-button has-menu';
+        // Create button element
+        this.button = document.createElement('button');
+        this.button.className = 'dropdown-button toolstrip-button';
+        this.button.id = this.id;
+        this.button.disabled = this.config.disabled || false;
         if (this.config.className) {
-            this.buttonWrapper.classList.add(this.config.className);
-        }
-        
-        // Create a native select element for maximum compatibility
-        this.select = document.createElement('select');
-        this.select.className = 'dropdown-select';
-        this.select.id = this.id;
-        this.select.disabled = this.config.disabled || false;
-        
-        // Style the select to be invisible but functional
-        this.select.style.opacity = '0';
-        this.select.style.position = 'absolute';
-        this.select.style.width = '100%';
-        this.select.style.height = '100%';
-        this.select.style.left = '0';
-        this.select.style.top = '0';
-        this.select.style.cursor = 'pointer';
-        
-        // Add a default option that shows the label
-        const defaultOption = document.createElement('option');
-        defaultOption.textContent = this.config.label;
-        defaultOption.value = '';
-        defaultOption.selected = true;
-        defaultOption.disabled = true;
-        this.select.appendChild(defaultOption);
-        
-        // Add menu items as options
-        if (this.config.items && Array.isArray(this.config.items)) {
-            this.config.items.forEach((item, index) => {
-                const option = document.createElement('option');
-                option.textContent = item.label;
-                option.value = index.toString();
-                this.select.appendChild(option);
-            });
+            this.button.classList.add(this.config.className);
         }
         
         // Add icon if provided
@@ -87,46 +58,116 @@ export class DropdownButton {
                 iconImg.alt = '';
                 iconElement.appendChild(iconImg);
             } else {
-                // It's a class name
-                iconElement.classList.add(this.config.icon);
+                // It's a class name or unicode
+                iconElement.textContent = this.config.icon;
             }
             
-            this.buttonWrapper.appendChild(iconElement);
+            this.button.appendChild(iconElement);
         }
         
         // Create visible button label
         const buttonLabel = document.createElement('span');
         buttonLabel.className = 'button-label';
         buttonLabel.textContent = this.config.label;
-        this.buttonWrapper.appendChild(buttonLabel);
+        this.button.appendChild(buttonLabel);
         
-        // Add change event listener
-        this.select.addEventListener('change', this._boundChangeHandler);
+        // Add dropdown indicator
+        const indicator = document.createElement('span');
+        indicator.className = 'dropdown-indicator';
+        indicator.textContent = '▼';
+        this.button.appendChild(indicator);
         
-        // Add select element to button wrapper
-        this.buttonWrapper.appendChild(this.select);
+        // Create dropdown menu
+        this.menu = document.createElement('div');
+        this.menu.className = 'dropdown-menu';
+        this.menu.style.display = 'none';
         
-        // Add button wrapper to container
-        this.element.appendChild(this.buttonWrapper);
+        // Add menu items
+        if (this.config.items && Array.isArray(this.config.items)) {
+            this.config.items.forEach((item, index) => {
+                const menuItem = document.createElement('div');
+                menuItem.className = 'dropdown-menu-item';
+                menuItem.textContent = item.label;
+                menuItem.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this._closeMenu();
+                    if (typeof item.onClick === 'function') {
+                        item.onClick();
+                    }
+                });
+                this.menu.appendChild(menuItem);
+            });
+        }
+        
+        // Add click event listener to button
+        this.button.addEventListener('click', this._boundClickHandler);
+        
+        // Add elements to container
+        this.element.appendChild(this.button);
+        this.element.appendChild(this.menu);
     }
     
     /**
-     * Handle select change event
-     * @param {Event} event - Change event
+     * Handle button click event
+     * @param {Event} event - Click event
      * @private
      */
-    _handleChange(event) {
-        const selectedIndex = parseInt(this.select.value, 10);
-        const selectedItem = this.config.items[selectedIndex];
+    _handleClick(event) {
+        event.stopPropagation();
+        if (this.config.disabled) return;
         
-        if (selectedItem && typeof selectedItem.onClick === 'function') {
-            selectedItem.onClick();
+        if (this.isOpen) {
+            this._closeMenu();
+        } else {
+            this._openMenu();
         }
+    }
+    
+    /**
+     * Handle document click to close menu when clicking outside
+     * @param {Event} event - Click event
+     * @private
+     */
+    _handleDocumentClick(event) {
+        if (!this.element.contains(event.target)) {
+            this._closeMenu();
+        }
+    }
+    
+    /**
+     * Open the dropdown menu
+     * @private
+     */
+    _openMenu() {
+        if (this.config.disabled) return;
         
-        // Reset to default option after action is performed
-        setTimeout(() => {
-            this.select.selectedIndex = 0;
-        }, 0);
+        this.isOpen = true;
+        
+        // Position the menu relative to the button
+        const buttonRect = this.button.getBoundingClientRect();
+        this.menu.style.position = 'fixed';
+        this.menu.style.top = (buttonRect.bottom) + 'px';
+        this.menu.style.left = buttonRect.left + 'px';
+        this.menu.style.minWidth = buttonRect.width + 'px';
+        
+        this.menu.style.display = 'block';
+        this.button.classList.add('menu-open');
+        
+        // Add document click listener to close menu when clicking outside
+        document.addEventListener('click', this._boundDocumentClickHandler);
+    }
+    
+    /**
+     * Close the dropdown menu
+     * @private
+     */
+    _closeMenu() {
+        this.isOpen = false;
+        this.menu.style.display = 'none';
+        this.button.classList.remove('menu-open');
+        
+        // Remove document click listener
+        document.removeEventListener('click', this._boundDocumentClickHandler);
     }
     
     /**
@@ -135,17 +176,22 @@ export class DropdownButton {
      */
     setDisabled(disabled) {
         this.config.disabled = disabled;
-        if (this.select) {
-            this.select.disabled = disabled;
+        if (this.button) {
+            this.button.disabled = disabled;
         }
         
-        // Update visual state of the button wrapper
-        if (this.buttonWrapper) {
+        // Update visual state of the button
+        if (this.button) {
             if (disabled) {
-                this.buttonWrapper.classList.add('disabled');
+                this.button.classList.add('disabled');
             } else {
-                this.buttonWrapper.classList.remove('disabled');
+                this.button.classList.remove('disabled');
             }
+        }
+        
+        // Close menu if disabled
+        if (disabled && this.isOpen) {
+            this._closeMenu();
         }
     }
     
@@ -158,17 +204,22 @@ export class DropdownButton {
         
         this.config.items = items;
         
-        // Remove all options except the first one (label)
-        while (this.select.options.length > 1) {
-            this.select.remove(1);
-        }
+        // Clear existing menu items
+        this.menu.innerHTML = '';
         
         // Add new items
         items.forEach((item, index) => {
-            const option = document.createElement('option');
-            option.textContent = item.label;
-            option.value = index.toString();
-            this.select.appendChild(option);
+            const menuItem = document.createElement('div');
+            menuItem.className = 'dropdown-menu-item';
+            menuItem.textContent = item.label;
+            menuItem.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._closeMenu();
+                if (typeof item.onClick === 'function') {
+                    item.onClick();
+                }
+            });
+            this.menu.appendChild(menuItem);
         });
     }
     
@@ -182,14 +233,9 @@ export class DropdownButton {
         this.config.label = label;
         
         // Update the visible button label
-        const buttonLabel = this.buttonWrapper.querySelector('.button-label');
+        const buttonLabel = this.button.querySelector('.button-label');
         if (buttonLabel) {
             buttonLabel.textContent = label;
-        }
-        
-        // Update the default option
-        if (this.select && this.select.options.length > 0) {
-            this.select.options[0].textContent = label;
         }
     }
     
@@ -197,10 +243,18 @@ export class DropdownButton {
      * Clean up resources when the component is destroyed
      */
     destroy() {
-        // Remove event listeners
-        if (this.select) {
-            this.select.removeEventListener('change', this._boundChangeHandler);
+        // Close menu if open
+        if (this.isOpen) {
+            this._closeMenu();
         }
+        
+        // Remove event listeners
+        if (this.button) {
+            this.button.removeEventListener('click', this._boundClickHandler);
+        }
+        
+        // Remove document click listener if still attached
+        document.removeEventListener('click', this._boundDocumentClickHandler);
         
         console.log(`DropdownButton ${this.id} - destroyed`);
     }
