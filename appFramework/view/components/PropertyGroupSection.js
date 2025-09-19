@@ -41,16 +41,41 @@ export class PropertyGroupSection extends ModelPanelSection {
      * @private
      */
     _createPropertyGroup() {
-        // Create group container as fieldset
-        const group = document.createElement('fieldset');
-        group.className = 'property-group';
+        // Create section container
+        const sectionContainer = document.createElement('div');
+        sectionContainer.className = 'section-container';
         
-        // Add group header as legend if name is provided
+        // Add section header if name is provided
         if (this._sectionConfig.GroupName) {
-            const groupHeader = document.createElement('legend');
-            groupHeader.textContent = this._sectionConfig.GroupName;
-            group.appendChild(groupHeader);
+            const sectionHeader = document.createElement('div');
+            sectionHeader.className = 'section-header';
+            
+            const headerTitle = document.createElement('span');
+            headerTitle.textContent = this._sectionConfig.GroupName;
+            sectionHeader.appendChild(headerTitle);
+            
+            const collapseIndicator = document.createElement('span');
+            collapseIndicator.className = 'collapse-indicator';
+            collapseIndicator.textContent = '▼';
+            sectionHeader.appendChild(collapseIndicator);
+            
+            // Add click handler for collapse/expand
+            sectionHeader.addEventListener('click', (event) => {
+                event.stopPropagation();
+                this._toggleSection(sectionHeader, sectionContent);
+            });
+            
+            sectionContainer.appendChild(sectionHeader);
         }
+        
+        // Create section content
+        const sectionContent = document.createElement('div');
+        sectionContent.className = 'section-content';
+        
+        // Create inner group container (for backwards compatibility)
+        const group = document.createElement('div');
+        group.className = 'property-group-content';
+        sectionContent.appendChild(group);
         
         // Using widget-based configuration
         if (this._sectionConfig.Widgets && Array.isArray(this._sectionConfig.Widgets)) {
@@ -65,7 +90,10 @@ export class PropertyGroupSection extends ModelPanelSection {
             console.warn('No widgets defined in section configuration');
         }
         
-        return group;
+        // Add section content to container
+        sectionContainer.appendChild(sectionContent);
+        
+        return sectionContainer;
     }
     
     /**
@@ -295,6 +323,26 @@ export class PropertyGroupSection extends ModelPanelSection {
         } catch (error) {
             console.error('Error creating file chooser component:', error);
             return null;
+        }
+    }
+    
+    /**
+     * Toggle section collapse/expand state
+     * @param {HTMLElement} header - The section header element
+     * @param {HTMLElement} content - The section content element
+     * @private
+     */
+    _toggleSection(header, content) {
+        const isCollapsed = content.classList.contains('collapsed');
+        
+        if (isCollapsed) {
+            // Expand
+            content.classList.remove('collapsed');
+            header.classList.remove('collapsed');
+        } else {
+            // Collapse
+            content.classList.add('collapsed');
+            header.classList.add('collapsed');
         }
     }
     

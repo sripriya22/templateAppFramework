@@ -50,10 +50,10 @@
   background-color: var(--panel-background);
   overflow: hidden;
   flex-shrink: 0;
-  box-shadow: var(--shadow-light);
+  box-shadow: none;
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0;
 }
 
 .layout-content {
@@ -71,10 +71,10 @@
   overflow: hidden; /* Changed from auto to hidden */
   position: relative;
   transition: width 0.3s ease;
-  padding: 12px;
-  box-shadow: var(--shadow-light);
-  border-radius: var(--border-radius);
-  margin: 8px;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  margin: 0;
 }
 
 .layout-left.collapsed {
@@ -88,10 +88,10 @@
   background-color: var(--panel-background);
   overflow: hidden; /* Changed from auto to hidden */
   position: relative;
-  padding: 0px;
-  border-radius: var(--border-radius);
-  margin: 0px;
-  box-shadow: var(--shadow-light);
+  padding: 0;
+  border-radius: 0;
+  margin: 0;
+  box-shadow: none;
 }
 
 /* Right panel */
@@ -103,10 +103,10 @@
   overflow: hidden; /* Changed from auto to hidden */
   position: relative;
   transition: width 0.3s ease;
-  padding: 12px;
-  box-shadow: var(--shadow-light);
-  border-radius: var(--border-radius);
-  margin: 8px;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  margin: 0;
 }
 
 .layout-right.collapsed {
@@ -123,10 +123,10 @@
   overflow: hidden; /* Changed from auto to hidden */
   position: relative;
   transition: height 0.3s ease;
-  padding: 8px 12px;
-  box-shadow: var(--shadow-light);
-  border-radius: var(--border-radius);
-  margin: 8px;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  margin: 0;
 }
 
 .layout-bottom.collapsed {
