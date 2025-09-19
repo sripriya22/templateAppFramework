@@ -1,9 +1,11 @@
 import { ModelPanelSection } from './ModelPanelSection.js';
+import { BaseComponent } from './BaseComponent.js';
 import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
+import { DefaultWidgetComponent } from './DefaultWidgetComponent.js';
+import { VectorInputComponent } from './VectorInputComponent.js';
+import { FileChooserWithPreview } from './FileChooserWithPreview.js';
 import { PropertyRenderUtils } from '../utils/PropertyRenderUtils.js';
 import { ArrayTableComponent } from './ArrayTableComponent.js';
-import { VectorInputComponent } from './VectorInputComponent.js';
-import { DefaultWidgetComponent } from './DefaultWidgetComponent.js';
 
 /**
  * Component for managing property group sections in the ModelPanel
@@ -187,6 +189,10 @@ export class PropertyGroupSection extends ModelPanelSection {
                     widgetInstance = this._createVectorWidget(propertyConfigs, widgetConfig.Label);
                     break;
                     
+                case 'FileChooserWithPreview':
+                    widgetInstance = this._createFileChooserWithPreviewWidget(propertyConfigs, widgetConfig.Label);
+                    break;
+                    
                 default:
                     console.error(`Widget class not supported: ${widgetClass}`);
                     return;
@@ -259,6 +265,35 @@ export class PropertyGroupSection extends ModelPanelSection {
             return vectorInput;
         } catch (error) {
             console.error('Error creating vector input component:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Create a file chooser with preview widget
+     * @param {Array} propertyConfigs - The property configurations
+     * @param {string} label - Optional label for the widget
+     * @returns {Object} The created file chooser component
+     * @private
+     */
+    _createFileChooserWithPreviewWidget(propertyConfigs, label) {
+        if (!Array.isArray(propertyConfigs) || propertyConfigs.length === 0) {
+            console.warn('File chooser widget requires at least one property configuration');
+            return null;
+        }
+        
+        // Create the file chooser component
+        try {
+            const fileChooser = new FileChooserWithPreview(this._view, {
+                model: this._model,
+                propertyConfigs: propertyConfigs,
+                label: label,
+                utils: this._modelPanel.getPropertyRenderUtils()
+            });
+            
+            return fileChooser;
+        } catch (error) {
+            console.error('Error creating file chooser component:', error);
             return null;
         }
     }

@@ -1,0 +1,59 @@
+/**
+ * FileChooserWithPreview.css
+ * Styles for the FileChooserWithPreview component
+ */
+
+.file-chooser-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+}
+
+.file-path-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background-color: #f9f9f9; /* Light gray background to indicate read-only */
+    cursor: text; /* Use text cursor to indicate text can be selected */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-chooser-button {
+    padding: 6px 12px;
+    background-color: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.file-chooser-button:hover {
+    background-color: #e0e0e0;
+}
+
+.file-chooser-button:active {
+    background-color: #d0d0d0;
+}
+
+.choose-button {
+    background-color: #e8f0fe;
+    border-color: #b8d0fe;
+}
+
+.choose-button:hover {
+    background-color: #d8e8ff;
+}
+
+.preview-button {
+    background-color: #f0f8f0;
+    border-color: #c0e0c0;
+}
+
+.preview-button:hover {
+    background-color: #e0f0e0;
+}
