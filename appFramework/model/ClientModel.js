@@ -447,20 +447,34 @@ export class ClientModel extends EventListener {
       // Get the current value for comparison using standardized utility
       const oldValue = ModelPathUtils.getValueFromObjectPath(rootInstance, fullPath);
       
+      // Convert the value if needed (e.g., "Infinity" strings to numeric Infinity)
+      // Get the object that contains the property to determine its type
+      const parentPath = ModelPathUtils.createObjectPath(segments, indices);
+      const parentObject = ModelPathUtils.getValueFromObjectPath(rootInstance, parentPath);
+      
+      let convertedValue = Value;
+      if (parentObject && parentObject._className) {
+        const propDef = this._modelManager?.getPropertyInfo(parentObject._className, PropertyName);
+        if (propDef && (propDef.Type === 'Number' || propDef.Type === 'number')) {
+          // For numeric properties, convert Infinity strings to numeric Infinity
+          convertedValue = convertNumericProperty(Value);
+        }
+      }
+      
       // Check if this is confirming a pending change from this client
       if (this._pendingChanges.has(fullPath)) {
         // This is a confirmation of a client-initiated change - mark it confirmed
         this.confirmPendingChange(fullPath);
         
         // If the value matches what we already have, no need to update the model
-        if (JSON.stringify(oldValue) === JSON.stringify(Value)) {
+        if (JSON.stringify(oldValue) === JSON.stringify(convertedValue)) {
           console.debug(`Server confirmed change for ${fullPath}, value already matches`);
           return;
         }
       }
       
       // Update the property in the model using standardized utility
-      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, fullPath, Value);
+      const success = ModelPathUtils.setValueAtObjectPath(rootInstance, fullPath, convertedValue);
       
       if (success) {
         console.debug(`Updated property at path ${fullPath} to:`, Value);

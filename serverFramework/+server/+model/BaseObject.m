@@ -347,7 +347,7 @@ classdef (Abstract) BaseObject < handle
         end
     end
     
-    methods (Static, Access=protected)
+    methods (Static)
         function value = convertInfsForJS(value)
             % CONVERTINFSFORJS Convert MATLAB inf/-inf to JavaScript-friendly strings
             %   Converts numeric inf to "Infinity" and -inf to "-Infinity" for
@@ -359,11 +359,14 @@ classdef (Abstract) BaseObject < handle
             %   Returns:
             %       value: The converted value (string if inf/-inf, otherwise unchanged)
             
+            % Send back as char vector - otherwise it is getting wrapped in
+            % in an array - need to investigate if this is a connectorcl
+            % issue or something else.
             if isnumeric(value) && isscalar(value)
                 if value == inf
-                    value = "Infinity";
+                    value = 'Infinity';
                 elseif value == -inf
-                    value = "-Infinity";
+                    value = '-Infinity';
                 end
             end
         end
