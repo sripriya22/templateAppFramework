@@ -198,10 +198,11 @@ export class PropertyRenderUtils {
      * @param {string} [options.viewAttribute='value'] - The element attribute to bind to
      * @param {string} [options.viewEvent='input'] - The event to listen to
      * @param {Function} [options.parser] - Optional parser function for input values
+     * @param {Function} [options.formatter] - Optional formatter function for display values
      * @param {Object} component - The component to register the binding with
      * @returns {Object|null} The created binding or null if creation fails
      */
-    createBinding({ model, objectPath, property, view, viewAttribute = 'value', viewEvent = 'input', parser }, component) {
+    createBinding({ model, objectPath, property, view, viewAttribute = 'value', viewEvent = 'input', parser, formatter }, component) {
         const app = this._view?.getApp();
         if (!app) {
             console.warn('App not available for binding creation');
@@ -228,6 +229,11 @@ export class PropertyRenderUtils {
             // Add parser if provided
             if (parser && typeof parser === 'function') {
                 bindingOptions.parser = parser;
+            }
+            
+            // Add formatter if provided
+            if (formatter && typeof formatter === 'function') {
+                bindingOptions.formatter = formatter;
             }
             
             // Create the binding through the binding manager

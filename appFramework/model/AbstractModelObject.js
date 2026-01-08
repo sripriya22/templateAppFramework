@@ -79,10 +79,17 @@ export class AbstractModelObject {
     }
 
     _getDefaultValue(propDef) {
+        let defaultValue;
         if (propDef.DefaultValue !== undefined) {
-            return propDef.DefaultValue;
+            if (propDef.Type === "number" && typeof propDef.DefaultValue === "string") {
+                defaultValue = Number(propDef.DefaultValue);
+            } else {
+                defaultValue = propDef.DefaultValue;
+            }
+        } else {
+            defaultValue = propDef.IsArray ? [] : undefined;
         }
-        return propDef.IsArray ? [] : undefined;
+        return defaultValue;
     }
 
     _validateValue(value, propDef) {

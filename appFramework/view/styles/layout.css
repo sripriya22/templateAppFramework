@@ -1,7 +1,7 @@
 /* Layout System CSS */
 
 :root {
-  --header-height: 60px; /* Increased from 50px */
+  --header-height: 40px; /* Match toolstrip height */
   --panel-min-width: 200px;
   --panel-min-height: 100px;
   --resize-handle-size: 4px;

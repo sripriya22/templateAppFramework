@@ -50,14 +50,19 @@ export class PropertyGroupSection extends ModelPanelSection {
             const sectionHeader = document.createElement('div');
             sectionHeader.className = 'section-header';
             
-            const headerTitle = document.createElement('span');
-            headerTitle.textContent = this._sectionConfig.GroupName;
-            sectionHeader.appendChild(headerTitle);
+            // Apply custom header color if specified
+            if (this._sectionConfig.HeaderColor) {
+                sectionHeader.style.backgroundColor = this._sectionConfig.HeaderColor;
+            }
             
             const collapseIndicator = document.createElement('span');
             collapseIndicator.className = 'collapse-indicator';
             collapseIndicator.textContent = '▼';
             sectionHeader.appendChild(collapseIndicator);
+            
+            const headerTitle = document.createElement('span');
+            headerTitle.textContent = this._sectionConfig.GroupName;
+            sectionHeader.appendChild(headerTitle);
             
             // Add click handler for collapse/expand
             sectionHeader.addEventListener('click', (event) => {

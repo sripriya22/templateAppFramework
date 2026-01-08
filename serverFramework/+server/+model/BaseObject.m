@@ -253,6 +253,10 @@ classdef (Abstract) BaseObject < handle
             end
             
             % If we get here, just do direct assignment
+            % Convert char to strings
+            if ischar(propValue)
+                propValue = string(propValue);
+            end
             obj.(propName) = propValue;
         end
     end
@@ -336,12 +340,55 @@ classdef (Abstract) BaseObject < handle
                     % Object with toData method
                     data.(prop) = value.toData();
                 else
-                    % Regular value
-                    data.(prop) = value;
+                    % Regular value - convert inf/-inf to strings for JavaScript
+                    data.(prop) = server.model.BaseObject.convertInfsForJS(value);
                 end
             end
         end
     end
     
-    % No static methods needed - initialization is now handled in the constructor
+    methods (Static, Access=protected)
+        function value = convertInfsForJS(value)
+            % CONVERTINFSFORJS Convert MATLAB inf/-inf to JavaScript-friendly strings
+            %   Converts numeric inf to "Infinity" and -inf to "-Infinity" for
+            %   proper serialization to JavaScript.
+            %
+            %   Parameters:
+            %       value: The value to convert
+            %
+            %   Returns:
+            %       value: The converted value (string if inf/-inf, otherwise unchanged)
+            
+            if isnumeric(value) && isscalar(value)
+                if value == inf
+                    value = "Infinity";
+                elseif value == -inf
+                    value = "-Infinity";
+                end
+            end
+        end
+        
+        function value = convertInfsFromJS(value)
+            % CONVERTINFSFROMJS Convert JavaScript Infinity strings to MATLAB inf/-inf
+            %   Converts "Infinity" or "+Infinity" to inf and "-Infinity" to -inf.
+            %   Also handles string/char numeric conversions.
+            %
+            %   Parameters:
+            %       value: The value to convert (can be string, char, or numeric)
+            %
+            %   Returns:
+            %       value: The converted value (numeric inf/-inf or parsed number)
+            
+            if isstring(value) || ischar(value)
+                if value == "Infinity" || value == "+Infinity"
+                    value = inf;
+                elseif value == "-Infinity"
+                    value = -inf;
+                else
+                    % Try to parse as number
+                    value = str2double(value);
+                end
+            end
+        end
+    end
 end

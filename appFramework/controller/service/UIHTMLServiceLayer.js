@@ -180,7 +180,14 @@ export class UIHTMLServiceLayer extends ServiceLayer {
                 }
                 return result;
             }
-            // Return primitives as-is
+            // Handle Infinity values - convert to strings for MATLAB
+            else if (data === Infinity) {
+                return "Infinity";
+            }
+            else if (data === -Infinity) {
+                return "-Infinity";
+            }
+            // Return other primitives as-is
             return data;
         };
         

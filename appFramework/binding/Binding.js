@@ -98,6 +98,9 @@ export class Binding {
     // Initialize the binding
     this._setupBindings();
     
+    // Initialize the view with the current model value (applying formatter)
+    this._syncViewFromModel();
+    
   }
   
   /**
@@ -205,6 +208,46 @@ export class Binding {
       } finally {
         // Always reset the flag, even if an error occurs
         this._isUpdatingFromModel = false;
+      }
+    }
+  }
+  
+  /**
+   * Sync view with current value from the input element (used during initialization)
+   * This applies the formatter to whatever value is currently in the view
+   * @private
+   */
+  _syncViewFromModel() {
+    // Get the current value from the view element
+    let currentValue;
+    if (this.viewAttribute === 'value') {
+      currentValue = this.view.value;
+    } else if (this.viewAttribute === 'checked') {
+      currentValue = this.view.checked;
+    } else {
+      currentValue = this.view[this.viewAttribute] || this.view.getAttribute(this.viewAttribute);
+    }
+    
+    // Parse it (in case it needs type conversion)
+    const parsedValue = this.parser(currentValue);
+    
+    // Format it for display
+    const formattedValue = this.formatter(parsedValue);
+    
+    // Update the view with the formatted value
+    if (this.viewAttribute === 'value') {
+      this.view.value = formattedValue;
+    } else if (this.viewAttribute === 'checked') {
+      this.view.checked = formattedValue;
+    } else if (this.viewAttribute === 'textContent') {
+      this.view.textContent = formattedValue;
+    } else if (this.viewAttribute === 'innerHTML') {
+      this.view.innerHTML = formattedValue;
+    } else {
+      try {
+        this.view[this.viewAttribute] = formattedValue;
+      } catch (e) {
+        this.view.setAttribute(this.viewAttribute, formattedValue);
       }
     }
   }

@@ -4,6 +4,7 @@ import { EventListener } from '../controller/EventListener.js';
 import { EventTypes } from '../controller/EventTypes.js';
 import { ModelPathUtils } from '../utils/ModelPathUtils.js';
 import ValidationManager from '../utils/ValidationManager.js';
+import { convertNumericProperty } from '../utils/TypeConversionUtils.js';
 
 /**
  * Client-side model that manages application data and state
@@ -322,8 +323,13 @@ export class ClientModel extends EventListener {
               }
             });
           } else {
-            // For primitive types, just assign the array directly
-            this[key] = value;
+            // For primitive types, convert if needed (e.g., Infinity strings for numbers)
+            if (propDef.Type === 'Number' || propDef.Type === 'number') {
+              this[key] = value.map(item => convertNumericProperty(item));
+            } else {
+              // For other primitive types, just assign the array directly
+              this[key] = value;
+            }
           }
         }
         // Special handling for boolean values to ensure proper type
@@ -359,8 +365,9 @@ export class ClientModel extends EventListener {
         } else if (typeof value === 'object') {
           // Object without Type specification
           this[key] = value;
-        } else if (!isNaN(Number(value)) && propDef?.Type === 'Number') {
-          this[key] = Number(value);
+        } else if (propDef?.Type === 'Number' || propDef?.Type === 'number') {
+          // Handle numeric types, including Infinity values from MATLAB
+          this[key] = convertNumericProperty(value);
         } else if (propDef?.Type === 'String' || typeof value === 'string') {
           this[key] = String(value);
         } else {

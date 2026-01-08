@@ -1,4 +1,6 @@
 // src/models/ModelClassDefinitionManager.js
+import { convertNumericProperty } from '../utils/TypeConversionUtils.js';
+
 /**
  * Manages model class definitions and their relationships
  * Uses a single map to store all class information to ensure consistency
@@ -195,13 +197,29 @@ export class ModelClassDefinitionManager {
      * @private
      */
     _createSyntheticConstructor(className) {
+        // Store reference to the manager for property lookups
+        const manager = this;
+        
         // Create a simple constructor that sets _className and copies properties
         const SyntheticClass = function(data = {}) {
             // Set class name
             this._className = className;
             
-            // Copy all properties
-            Object.assign(this, data);
+            // Get class definition to check property types
+            const definition = manager.getDefinition(className);
+            const propertyDefs = definition?.Properties || {};
+            
+            // Copy properties with type conversion
+            for (const [key, value] of Object.entries(data)) {
+                const propDef = propertyDefs[key];
+                
+                // Handle numeric properties that might have Infinity strings from MATLAB
+                if (propDef && (propDef.Type === 'Number' || propDef.Type === 'number')) {
+                    this[key] = convertNumericProperty(value);
+                } else {
+                    this[key] = value;
+                }
+            }
             
             // Ensure ID
             if (!this.id && !this.ID) {

@@ -63,7 +63,7 @@ export class ModelPanel extends BaseComponent {
         // Create header
         const header = document.createElement('div');
         header.className = 'panel-header';
-        header.textContent = this._view.getApp().getRootClassName()// Default text, will be updated when model is set
+        header.textContent = ''; // Will be set based on config or model
         this.headerElement = header; // Store reference to header for updates
 
         // Create form container
@@ -92,19 +92,13 @@ export class ModelPanel extends BaseComponent {
         // Clear existing content
         this.formElement.innerHTML = '';
         
+        // Update header based on config or model
+        this._updateHeader(model);
+        
         if (!model) {
             console.warn('ModelPanel.updateModel called with null model');
+            this._showNoModelMessage();
             return;
-        }
-        
-        // Update header with class name
-        if (this.headerElement) {
-            // Try to get class name from model or config
-            const className = this._view.getApp().getRootClassName();
-            
-            // Format the class name for display (remove any package prefix)
-            const displayName = className.split('.').pop();
-            this.headerElement.textContent = displayName;
         }
         
         // If we have a configuration and it's loaded, use it
@@ -121,6 +115,53 @@ export class ModelPanel extends BaseComponent {
         } else {
             console.error('No configuration available for model panel');
         }
+    }
+    
+    /**
+     * Update the header based on configuration or model
+     * @param {Object} model - The model data (can be null)
+     * @private
+     */
+    _updateHeader(model) {
+        if (!this.headerElement) return;
+        
+        // Check if config has a HeaderLabel
+        if (this._config && this._config.HeaderLabel !== undefined) {
+            if (this._config.HeaderLabel === '') {
+                // Empty HeaderLabel means hide the header
+                this.headerElement.style.display = 'none';
+            } else {
+                // Use the HeaderLabel from config
+                this.headerElement.style.display = 'block';
+                this.headerElement.textContent = this._config.HeaderLabel;
+            }
+        } else if (model) {
+            // Fallback to class name if no HeaderLabel in config
+            this.headerElement.style.display = 'block';
+            const className = this._view.getApp().getRootClassName();
+            const displayName = className.split('.').pop();
+            this.headerElement.textContent = displayName;
+        } else {
+            // No model and no HeaderLabel - hide header
+            this.headerElement.style.display = 'none';
+        }
+    }
+    
+    /**
+     * Show the no model message
+     * @private
+     */
+    _showNoModelMessage() {
+        const noModelMessage = document.createElement('div');
+        noModelMessage.className = 'no-model-message';
+        
+        // Use NoModelMessage from config if available, otherwise use default
+        const message = (this._config && this._config.NoModelMessage) 
+            ? this._config.NoModelMessage 
+            : 'No model loaded.';
+            
+        noModelMessage.textContent = message;
+        this.formElement.appendChild(noModelMessage);
     }
     
     /**

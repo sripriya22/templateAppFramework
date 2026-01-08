@@ -5,6 +5,7 @@
  */
 import { BaseComponent } from './BaseComponent.js';
 import { ModelPathUtils } from '../../utils/ModelPathUtils.js';
+import { parseInfinityInput, formatInfinityForDisplay } from '../../utils/TypeConversionUtils.js';
 
 export class ArrayTableComponent extends BaseComponent {
     /**
@@ -60,7 +61,7 @@ export class ArrayTableComponent extends BaseComponent {
         const arrayData = this._getArrayData();
         console.log('Array data:', arrayData);
         
-        if (arrayData && Array.isArray(arrayData)) {
+        if (arrayData && Array.isArray(arrayData) && arrayData.length > 0) {
             // Create table body
             const tbody = document.createElement('tbody');
             
@@ -70,11 +71,13 @@ export class ArrayTableComponent extends BaseComponent {
             });
             
             table.appendChild(tbody);
+            container.appendChild(table);
         } else {
-            console.warn(`No array data found at path: ${this._propertyPath}`);
+            // Show empty message instead of empty table
+            const emptyMessage = this._createEmptyMessage();
+            container.appendChild(emptyMessage);
         }
         
-        container.appendChild(table);
         return container;
     }
     
@@ -165,6 +168,7 @@ export class ArrayTableComponent extends BaseComponent {
         }
         
         // Create the input element, passing propDef for combobox support
+        // Note: The binding formatter will handle displaying inf/-inf for Infinity values
         const input = this._utils.createPropertyInput(propType, propertyValue, { isEditable, propDef });
         
         // Create binding path for this cell
@@ -179,8 +183,10 @@ export class ArrayTableComponent extends BaseComponent {
             view: input,
             viewAttribute: input.type === 'checkbox' ? 'checked' : 'value',
             viewEvent: 'input',
-            // Add parser for numeric values to ensure proper type conversion
-            parser: propType === 'number' ? val => parseFloat(val) : val => val
+            // Add parser for numeric values to handle inf/-inf input and proper type conversion
+            parser: propType === 'number' ? parseInfinityInput : val => val,
+            // Add formatter to display inf/-inf while storing numeric Infinity in model
+            formatter: propType === 'number' ? formatInfinityForDisplay : val => val
         }, this);
         
         // Create dependent bindings for editability, visibility, etc.
@@ -269,12 +275,50 @@ export class ArrayTableComponent extends BaseComponent {
     }
     
     /**
-     * Get array data from model
+     * Create empty message element
      * @private
-     * @returns {Array|null} The array data
+     * @returns {HTMLElement} The created empty message element
+     */
+    _createEmptyMessage() {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'empty-array-message';
+        
+        // Extract property name from the path for a user-friendly message
+        const propertyName = this._getPropertyDisplayName();
+        emptyDiv.textContent = `No ${propertyName}`;
+        
+        return emptyDiv;
+    }
+    
+    /**
+     * Get a user-friendly display name for the property
+     * @private
+     * @returns {string} The display name
+     */
+    _getPropertyDisplayName() {
+        // If we have a title, use it
+        if (this._title) {
+            return this._title;
+        }
+        
+        // Otherwise, extract from property path and format it
+        const pathParts = this._propertyPath.split('.');
+        const propertyName = pathParts[pathParts.length - 1];
+        
+        // Convert camelCase to readable format
+        return propertyName.replace(/([A-Z])/g, ' $1').trim();
+    }
+    
+    /**
+     * Get array data from the model
+     * @private
+     * @returns {Array|null} The array data or null if not found
      */
     _getArrayData() {
-        console.log(`Getting array data for ${this._propertyPath}`);
+        if (!this._propertyPath) {
+            console.warn('Property path not set');
+            return null;
+        }
         
         if (!this._model) {
             console.warn('Model not available to get array data');
